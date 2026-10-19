@@ -98,3 +98,19 @@ Run the test suite using pytest:
 ```bash
 pytest tests/ -v
 ```
+### Quick Usage
+
+    # 1. Install package in editable development mode
+    pip install -e .
+
+    # 2. Preview organization in dry-run mode
+    python -m folder_organizer.cli C:\Users\caleb\Downloads --dry-run
+
+    # 3. Launch the full interactive Textual TUI
+    folder-organizer C:\Users\caleb\Downloads
+
+    # 4. Undo the last organization session at any time
+    folder-organizer undo
+
+    # 5. Run the full automated test suite
+    pytest tests/ -v

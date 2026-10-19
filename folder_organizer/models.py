@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
+COMPOUND_EXTENSIONS = (".tar.gz", ".tar.bz2", ".tar.xz")
+
 
 class ClassificationSource(str, Enum):
     HEURISTIC = "heuristic"

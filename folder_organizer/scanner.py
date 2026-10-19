@@ -1,7 +1,6 @@
-import os
 from pathlib import Path
 from typing import List, Set
-from folder_organizer.models import FileItem
+from folder_organizer.models import FileItem, COMPOUND_EXTENSIONS
 from folder_organizer.utils.file_peek import extract_content_peek
 
 class Scanner:
@@ -37,8 +36,8 @@ class Scanner:
                 continue
 
             # Detect compound extension like .tar.gz if present
-            suffixes = "".join(entry.suffixes).lower()
-            ext = suffixes if suffixes in {".tar.gz", ".tar.bz2", ".tar.xz"} else entry.suffix.lower()
+            comp_ext = next((c for c in COMPOUND_EXTENSIONS if lower_name.endswith(c)), None)
+            ext = comp_ext if comp_ext else entry.suffix.lower()
 
             # Skip active downloads
             if ext in self.IGNORED_EXTENSIONS or any(lower_name.endswith(e) for e in self.IGNORED_EXTENSIONS):

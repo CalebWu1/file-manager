@@ -6,10 +6,8 @@ from folder_organizer.models import (
     ClassificationSource,
     MoveOperation,
     CollisionAction,
+    COMPOUND_EXTENSIONS,
 )
-
-
-COMPOUND_EXTENSIONS = (".tar.gz", ".tar.bz2", ".tar.xz")
 
 
 class PlanBuilder:
@@ -95,9 +93,7 @@ class PlanBuilder:
                     source=source,
                     reason=reason,
                     collision_detected=collision_detected,
-                    collision_action=CollisionAction.AUTO_RENAME
-                    if collision_detected
-                    else CollisionAction.SKIP,
+                    collision_action=CollisionAction.AUTO_RENAME,
                     is_selected=True,
                 )
             )

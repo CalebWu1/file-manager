@@ -5,7 +5,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Union, Set
-from folder_organizer.models import MoveOperation, SessionJournal, CollisionAction
+from folder_organizer.models import MoveOperation, SessionJournal, CollisionAction, COMPOUND_EXTENSIONS
 from folder_organizer.planner import PlanBuilder
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,6 @@ class SafeExecutor:
         restored = 0
         created_dirs = set()
         restored_targets: Set[Path] = set()
-        compound_exts = (".tar.gz", ".tar.bz2", ".tar.xz")
 
         for op in reversed(operations):
             src_str = op["to"]
@@ -161,7 +160,7 @@ class SafeExecutor:
                 dest_orig = orig
                 if dest_orig.exists() or dest_orig in restored_targets:
                     lower_name = orig.name.lower()
-                    comp_ext = next((ext for ext in compound_exts if lower_name.endswith(ext)), None)
+                    comp_ext = next((ext for ext in COMPOUND_EXTENSIONS if lower_name.endswith(ext)), None)
                     if comp_ext:
                         stem = orig.name[:-len(comp_ext)]
                         suffix = orig.name[-len(comp_ext):]
@@ -192,8 +191,17 @@ class SafeExecutor:
         for d in created_dirs:
             cur = d
             while cur and cur != cur.parent:
-                if target_dir_resolved and cur.resolve() == target_dir_resolved:
-                    break
+                if target_dir_resolved:
+                    try:
+                        if not cur.resolve().is_relative_to(target_dir_resolved) or cur.resolve() == target_dir_resolved:
+                            break
+                    except AttributeError:
+                        try:
+                            cur.resolve().relative_to(target_dir_resolved)
+                            if cur.resolve() == target_dir_resolved:
+                                break
+                        except ValueError:
+                            break
                 try:
                     if cur.exists() and not any(cur.iterdir()):
                         cur.rmdir()

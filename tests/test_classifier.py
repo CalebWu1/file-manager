@@ -245,3 +245,59 @@ def test_classify_batch_filters_hallucinated_filenames_and_non_dicts():
         assert results["real.pdf"].source == ClassificationSource.LLM
 
 
+def test_classify_batch_handles_non_string_primitives():
+    classifier = LLMClassifier()
+    item = FileItem(
+        path=Path("numbers.pdf"),
+        filename="numbers.pdf",
+        extension=".pdf",
+        size_bytes=100,
+        modified_time=0.0,
+    )
+    mock_response = {
+        "message": {
+            "content": json.dumps({
+                "classifications": [
+                    {"filename": "numbers.pdf", "category": 12345, "subfolder": False, "reason": 999}
+                ]
+            })
+        }
+    }
+    with patch.object(classifier.client, "chat", return_value=mock_response):
+        results = classifier.classify_batch([item])
+        assert results["numbers.pdf"].category == "12345"
+        assert results["numbers.pdf"].subfolder == "False"
+        assert results["numbers.pdf"].reason == "999"
+
+
+def test_classify_batch_chunks_large_inputs():
+    classifier = LLMClassifier()
+    items = [
+        FileItem(
+            path=Path(f"file_{i}.pdf"),
+            filename=f"file_{i}.pdf",
+            extension=".pdf",
+            size_bytes=100,
+            modified_time=0.0,
+        )
+        for i in range(25)
+    ]
+
+    call_count = 0
+
+    def mock_chat(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return {
+            "message": {
+                "content": json.dumps({"classifications": []})
+            }
+        }
+
+    with patch.object(classifier.client, "chat", side_effect=mock_chat):
+        results = classifier.classify_batch(items, chunk_size=10)
+        assert len(results) == 25
+        # 25 items with chunk_size 10 produces 3 API calls
+        assert call_count == 3
+
+

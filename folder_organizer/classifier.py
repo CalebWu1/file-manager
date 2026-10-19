@@ -20,10 +20,17 @@ class LLMClassifier:
         except Exception:
             return False
 
-    def classify_batch(self, items: List[FileItem]) -> Dict[str, ClassificationResult]:
+    def classify_batch(self, items: List[FileItem], chunk_size: int = 15) -> Dict[str, ClassificationResult]:
         if not items:
             return {}
 
+        results: Dict[str, ClassificationResult] = {}
+        for i in range(0, len(items), chunk_size):
+            chunk = items[i:i + chunk_size]
+            results.update(self._classify_chunk(chunk))
+        return results
+
+    def _classify_chunk(self, items: List[FileItem]) -> Dict[str, ClassificationResult]:
         file_summaries = []
         for item in items:
             summary = {
@@ -60,11 +67,16 @@ class LLMClassifier:
                 fname = entry.get("filename")
                 if fname and fname in valid_names:
                     cat_raw = entry.get("category")
-                    category = (cat_raw or "Documents").strip().title()
+                    cat_str = str(cat_raw).strip().title() if cat_raw is not None else "Documents"
+                    category = cat_str if cat_str else "Documents"
+
                     sub_raw = entry.get("subfolder")
-                    subfolder = (sub_raw or "").strip() or None
+                    sub_str = str(sub_raw).strip() if sub_raw is not None else ""
+                    subfolder = sub_str if sub_str else None
+
                     reason_raw = entry.get("reason")
-                    reason = (reason_raw or "Classified by Llama 3.2").strip()
+                    reason_str = str(reason_raw).strip() if reason_raw is not None else "Classified by Llama 3.2"
+                    reason = reason_str if reason_str else "Classified by Llama 3.2"
 
                     results[fname] = ClassificationResult(
                         category=category,

@@ -31,7 +31,8 @@ def test_extract_pdf_peek(tmp_path: Path):
         writer.write(f)
     peek = extract_content_peek(pdf_path)
     # Blank page returns empty string or string; should not error
-    assert peek is not None or peek == ""
+    assert peek is not None
+
 
 def test_scanner_filters_hidden_and_active_downloads(tmp_path: Path):
     (tmp_path / "document.pdf").write_text("dummy pdf", encoding="utf-8")
@@ -52,6 +53,7 @@ def test_scanner_filters_hidden_and_active_downloads(tmp_path: Path):
     assert ".hidden_file" not in filenames
     assert "subfolder" not in filenames  # ignores directories
 
+
 def test_scanner_system_files_ignored(tmp_path: Path):
     (tmp_path / "desktop.ini").write_text("system", encoding="utf-8")
     (tmp_path / "Thumbs.db").write_text("system", encoding="utf-8")
@@ -65,6 +67,7 @@ def test_scanner_system_files_ignored(tmp_path: Path):
     assert filenames == ["valid.txt"]
     assert items[0].content_peek == "valid content"
 
+
 def test_scanner_tar_gz_compound_extension(tmp_path: Path):
     tar_file = tmp_path / "archive.tar.gz"
     tar_file.write_bytes(b"dummy tar gz")
@@ -73,6 +76,18 @@ def test_scanner_tar_gz_compound_extension(tmp_path: Path):
     items = scanner.scan_directory(tmp_path)
 
     assert len(items) == 1
+    assert items[0].extension == ".tar.gz"
+
+
+def test_scanner_dotted_compound_extension(tmp_path: Path):
+    tar_file = tmp_path / "release-v1.0.0.tar.gz"
+    tar_file.write_bytes(b"dummy tar gz")
+
+    scanner = Scanner()
+    items = scanner.scan_directory(tmp_path)
+
+    assert len(items) == 1
+    assert items[0].filename == "release-v1.0.0.tar.gz"
     assert items[0].extension == ".tar.gz"
 
 def test_scanner_invalid_dir(tmp_path: Path):
