@@ -35,6 +35,11 @@ class FileItem(BaseModel):
     is_active_download: bool = False
 
 
+class ScannedItem(FileItem):
+    modified_time: float = 0.0
+    modified_at: Optional[datetime] = None
+
+
 class ClassificationResult(BaseModel):
     category: str
     subfolder: Optional[str] = None
