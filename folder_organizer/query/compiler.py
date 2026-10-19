@@ -1,7 +1,13 @@
+import json
+import logging
 import re
-from typing import Optional
+from typing import Any, Optional
+
+import ollama
 
 from folder_organizer.models import ActionType, QueryIntent, QueryPredicates
+
+logger = logging.getLogger(__name__)
 
 
 class KeywordFallbackCompiler:
@@ -91,3 +97,66 @@ class KeywordFallbackCompiler:
             predicates=predicates,
             reasoning=f"Heuristic parse: action={action.value}, extensions={len(extensions)} matched",
         )
+
+
+class QueryCompiler:
+    """Compiles natural language queries using local Ollama (Llama 3.2) with heuristic fallback."""
+
+    SYSTEM_PROMPT = """You are a file query interpreter for a desktop folder organizer.
+Analyze the user's natural language request and extract:
+1. "action": "FIND" (just searching/listing), "MOVE" (moving files), or "TRASH" (deleting/recycling files).
+2. "destination_folder": string or null (e.g. "Installers", "Receipts", if action is MOVE).
+3. "predicates":
+   - "extensions": array of lowercase extensions starting with a dot (e.g. [".exe", ".msi"]). Expand terms like "installers" to [".exe", ".msi", ".dmg", ".pkg", ".appinstaller", ".deb", ".rpm"].
+   - "name_patterns": array of filename substrings (e.g. ["setup", "install"]).
+   - "min_size_bytes": integer or null.
+   - "max_size_bytes": integer or null.
+   - "needs_semantic_check": boolean (true if query requires verifying content peek text, e.g. "Amazon receipts" or "tax documents").
+   - "semantic_prompt": string or null (the verification question if needs_semantic_check is true).
+4. "reasoning": brief explanation.
+
+Respond ONLY with valid JSON conforming to this schema. No markdown formatting."""
+
+    def __init__(self, model: str = "llama3.2", host: str = "http://localhost:11434", client: Optional[Any] = None):
+        self.model = model
+        self.host = host
+        self._client = client or ollama.Client(host=host)
+        self._fallback = KeywordFallbackCompiler()
+
+    def compile(self, prompt: str) -> QueryIntent:
+        try:
+            response = self._client.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                format="json",
+                options={"temperature": 0.0},
+            )
+            content = response.get("message", {}).get("content", "{}")
+            data = json.loads(content)
+
+            action = ActionType(data.get("action", "FIND").upper())
+            dest = data.get("destination_folder")
+            pred_data = data.get("predicates", {})
+
+            predicates = QueryPredicates(
+                extensions=[e if e.startswith(".") else f".{e}" for e in pred_data.get("extensions", [])],
+                name_patterns=pred_data.get("name_patterns", []),
+                min_size_bytes=pred_data.get("min_size_bytes"),
+                max_size_bytes=pred_data.get("max_size_bytes"),
+                needs_semantic_check=bool(pred_data.get("needs_semantic_check", False)),
+                semantic_prompt=pred_data.get("semantic_prompt"),
+            )
+
+            return QueryIntent(
+                raw_query=prompt,
+                action=action,
+                destination_folder=dest,
+                predicates=predicates,
+                reasoning=data.get("reasoning", "Parsed by Llama 3.2"),
+            )
+        except Exception as exc:
+            logger.warning(f"Ollama query compilation failed ({exc}); falling back to keyword heuristics")
+            return self._fallback.compile(prompt)
