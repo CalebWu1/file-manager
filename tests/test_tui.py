@@ -560,3 +560,76 @@ async def test_tui_target_path_outside_target_dir(tmp_path: Path):
         table = app.query_one(DataTable)
         row = table.get_row("0")
         assert str(outside_dir / "test.pdf") == row[2]
+
+
+
+@pytest.mark.asyncio
+async def test_tui_action_edit_destination_recalculates_collision(tmp_path: Path):
+    # Create an existing collision file at target destination
+    existing_dest_dir = tmp_path / "Documents" / "ExistingFolder"
+    existing_dest_dir.mkdir(parents=True, exist_ok=True)
+    (existing_dest_dir / "invoice.pdf").write_text("existing content")
+
+    op = MoveOperation(
+        source_path=tmp_path / "invoice.pdf",
+        target_category="Documents",
+        target_path=tmp_path / "Documents" / "invoice.pdf",
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        collision_detected=False,
+    )
+    executor = MagicMock()
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
+
+    async with app.run_test() as pilot:
+        # Edit destination to ExistingFolder -> should detect collision
+        app.action_edit_destination()
+        await pilot.pause()
+        assert isinstance(app.screen, EditDestinationModal)
+
+        input_widget = app.screen.query_one("#dest-input", Input)
+        input_widget.value = "Documents/ExistingFolder"
+        save_btn = app.screen.query_one("#save-btn", Button)
+        await pilot.click(save_btn)
+        await pilot.pause()
+
+        assert app.plan[0].collision_detected is True
+        assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
+        table = app.query_one(DataTable)
+        assert table.get_row("0")[4] == CollisionAction.AUTO_RENAME.value
+
+        # Edit destination to NonExistingFolder -> should clear collision
+        app.action_edit_destination()
+        await pilot.pause()
+        assert isinstance(app.screen, EditDestinationModal)
+
+        input_widget = app.screen.query_one("#dest-input", Input)
+        input_widget.value = "Documents/FreshFolder"
+        save_btn = app.screen.query_one("#save-btn", Button)
+        await pilot.click(save_btn)
+        await pilot.pause()
+
+        assert app.plan[0].collision_detected is False
+        assert table.get_row("0")[4] == "None"
+
+
+@pytest.mark.asyncio
+async def test_tui_preview_box_shows_content_snippet(tmp_path: Path):
+    source_file = tmp_path / "sample.py"
+    source_file.write_text("def my_awesome_func():\n    return 42\n", encoding="utf-8")
+
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Code",
+        target_path=tmp_path / "Code" / "sample.py",
+        source=ClassificationSource.HEURISTIC,
+        reason="Python code match",
+    )
+    executor = MagicMock()
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
+
+    async with app.run_test() as pilot:
+        preview = app.query_one("#preview-box", Static)
+        rendered = str(preview.render())
+        assert "def my_awesome_func():" in rendered
+        assert "Preview:" in rendered

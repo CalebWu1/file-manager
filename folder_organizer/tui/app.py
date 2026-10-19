@@ -1,10 +1,12 @@
 from pathlib import Path
 from typing import List, Optional
 from textual.app import App, ComposeResult
+from textual.css.query import NoMatches
 from textual.widgets import Header, Footer, DataTable, Static, Label
 from folder_organizer.models import MoveOperation, CollisionAction
 from folder_organizer.executor import SafeExecutor
 from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal
+from folder_organizer.utils.file_peek import extract_content_peek
 
 
 class OrganizerApp(App):
@@ -60,7 +62,7 @@ class OrganizerApp(App):
             self._refresh_table()
             if self.plan:
                 self._update_preview(0)
-        except Exception:
+        except NoMatches:
             pass
 
     def _update_preview(self, idx: int) -> None:
@@ -68,14 +70,22 @@ class OrganizerApp(App):
             op = self.plan[idx]
             try:
                 box = self.query_one("#preview-box", Static)
-                box.update(f"[b]Source:[/b] {op.source_path}\n[b]Target:[/b] {op.target_path}\n[b]Reason:[/b] {op.reason}")
-            except Exception:
+                snippet_line = ""
+                peek = extract_content_peek(op.source_path, max_bytes=200)
+                if peek:
+                    first_line = peek.splitlines()[0][:80].strip()
+                    if first_line:
+                        snippet_line = f"\n[b]Preview:[/b] {first_line}"
+                box.update(
+                    f"[b]Source:[/b] {op.source_path}\n[b]Target:[/b] {op.target_path}\n[b]Reason:[/b] {op.reason}{snippet_line}"
+                )
+            except NoMatches:
                 pass
 
     def _refresh_table(self) -> None:
         try:
             table = self.query_one(DataTable)
-        except Exception:
+        except NoMatches:
             return
         prev_cursor_row = table.cursor_row
         table.clear()
@@ -100,7 +110,7 @@ class OrganizerApp(App):
     def action_toggle_selection(self) -> None:
         try:
             table = self.query_one(DataTable)
-        except Exception:
+        except NoMatches:
             return
         if table.cursor_row is not None and 0 <= table.cursor_row < len(self.plan):
             op = self.plan[table.cursor_row]
@@ -118,7 +128,7 @@ class OrganizerApp(App):
     def action_cycle_collision(self) -> None:
         try:
             table = self.query_one(DataTable)
-        except Exception:
+        except NoMatches:
             return
         if table.cursor_row is not None and 0 <= table.cursor_row < len(self.plan):
             op = self.plan[table.cursor_row]
@@ -134,7 +144,7 @@ class OrganizerApp(App):
     def action_edit_destination(self) -> None:
         try:
             table = self.query_one(DataTable)
-        except Exception:
+        except NoMatches:
             return
         if table.cursor_row is not None and 0 <= table.cursor_row < len(self.plan):
             op = self.plan[table.cursor_row]
@@ -150,6 +160,10 @@ class OrganizerApp(App):
                             op.target_path = self.target_dir / op.target_category / op.target_subfolder / op.source_path.name
                         else:
                             op.target_path = self.target_dir / op.target_category / op.source_path.name
+
+                        op.collision_detected = op.target_path.exists()
+                        if op.collision_detected:
+                            op.collision_action = CollisionAction.AUTO_RENAME
                         self._refresh_table()
 
             self.push_screen(EditDestinationModal(op.source_path.name, curr_str), on_edit_done)
