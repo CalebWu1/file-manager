@@ -5,6 +5,7 @@ from textual.css.query import NoMatches
 from textual.widgets import Header, Footer, DataTable, Static, Label
 from folder_organizer.models import MoveOperation, CollisionAction
 from folder_organizer.executor import SafeExecutor
+from folder_organizer.planner import PlanBuilder
 from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal
 from folder_organizer.utils.file_peek import extract_content_peek
 
@@ -139,7 +140,13 @@ class OrganizerApp(App):
                     CollisionAction.OVERWRITE: CollisionAction.AUTO_RENAME,
                 }
                 op.collision_action = cycle.get(op.collision_action, CollisionAction.AUTO_RENAME)
+                base_path = op.intended_path or op.target_path
+                if op.collision_action == CollisionAction.AUTO_RENAME:
+                    op.target_path = PlanBuilder().resolve_target_path(base_path)
+                else:
+                    op.target_path = base_path
                 self._refresh_table()
+                self._update_preview(table.cursor_row)
 
     def action_edit_destination(self) -> None:
         try:
@@ -157,14 +164,20 @@ class OrganizerApp(App):
                         op.target_category = parts[0]
                         op.target_subfolder = "/".join(parts[1:]) if len(parts) > 1 else None
                         if op.target_subfolder:
-                            op.target_path = self.target_dir / op.target_category / op.target_subfolder / op.source_path.name
+                            intended_path = self.target_dir / op.target_category / op.target_subfolder / op.source_path.name
                         else:
-                            op.target_path = self.target_dir / op.target_category / op.source_path.name
+                            intended_path = self.target_dir / op.target_category / op.source_path.name
 
-                        op.collision_detected = op.target_path.exists()
+                        op.intended_path = intended_path
+                        op.collision_detected = intended_path.exists()
                         if op.collision_detected:
                             op.collision_action = CollisionAction.AUTO_RENAME
+                            op.target_path = PlanBuilder().resolve_target_path(intended_path)
+                        else:
+                            op.target_path = intended_path
                         self._refresh_table()
+                        if table.cursor_row is not None:
+                            self._update_preview(table.cursor_row)
 
             self.push_screen(EditDestinationModal(op.source_path.name, curr_str), on_edit_done)
 

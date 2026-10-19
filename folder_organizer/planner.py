@@ -9,6 +9,9 @@ from folder_organizer.models import (
 )
 
 
+COMPOUND_EXTENSIONS = (".tar.gz", ".tar.bz2", ".tar.xz")
+
+
 class PlanBuilder:
     """Computes move operations and resolves target collisions."""
 
@@ -16,12 +19,20 @@ class PlanBuilder:
         self, target_path: Path, occupied: Optional[Set[Path]] = None
     ) -> Path:
         """If target_path exists on disk or is in occupied set, finds next available 'name (N).ext'."""
-        is_taken = lambda p: p.exists() or (occupied is not None and p in occupied)
+        def is_taken(p: Path) -> bool:
+            return p.exists() or (occupied is not None and p in occupied)
+
         if not is_taken(target_path):
             return target_path
 
-        stem = target_path.stem
-        suffix = target_path.suffix
+        lower_name = target_path.name.lower()
+        comp_ext = next((ext for ext in COMPOUND_EXTENSIONS if lower_name.endswith(ext)), None)
+        if comp_ext:
+            stem = target_path.name[:-len(comp_ext)]
+            suffix = target_path.name[-len(comp_ext):]
+        else:
+            stem = target_path.stem
+            suffix = target_path.suffix
         parent = target_path.parent
 
         counter = 1
@@ -80,6 +91,7 @@ class PlanBuilder:
                     target_category=category,
                     target_subfolder=subfolder,
                     target_path=final_path,
+                    intended_path=intended_path,
                     source=source,
                     reason=reason,
                     collision_detected=collision_detected,

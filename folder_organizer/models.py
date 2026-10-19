@@ -1,6 +1,6 @@
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
 
@@ -39,6 +39,7 @@ class MoveOperation(BaseModel):
     target_category: str
     target_subfolder: Optional[str] = None
     target_path: Path
+    intended_path: Optional[Path] = None
     source: ClassificationSource
     reason: str
     collision_detected: bool = False

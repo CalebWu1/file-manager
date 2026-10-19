@@ -79,3 +79,14 @@ def test_scanner_invalid_dir(tmp_path: Path):
     scanner = Scanner()
     with pytest.raises(ValueError, match="does not exist or is not a directory"):
         scanner.scan_directory(tmp_path / "nonexistent")
+
+
+def test_scanner_active_download_uppercase(tmp_path: Path):
+    (tmp_path / "movie.MP4.CRDOWNLOAD").write_bytes(b"downloading...")
+    (tmp_path / "real.mp4").write_bytes(b"done")
+
+    scanner = Scanner()
+    items = scanner.scan_directory(tmp_path)
+    filenames = [item.filename for item in items]
+    assert filenames == ["real.mp4"]
+

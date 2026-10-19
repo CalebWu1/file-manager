@@ -36,6 +36,8 @@ class HeuristicEngine:
 
     def classify(self, item: FileItem) -> Optional[ClassificationResult]:
         ext = item.extension.lower()
+        if ext and not ext.startswith("."):
+            ext = f".{ext}"
         if ext in self.EXTENSION_MAP:
             category = self.EXTENSION_MAP[ext]
             return ClassificationResult(

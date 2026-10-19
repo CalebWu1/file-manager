@@ -633,3 +633,83 @@ async def test_tui_preview_box_shows_content_snippet(tmp_path: Path):
         rendered = str(preview.render())
         assert "def my_awesome_func():" in rendered
         assert "Preview:" in rendered
+
+
+@pytest.mark.asyncio
+async def test_tui_destination_edit_auto_renames_target_path(tmp_path: Path):
+    existing_dest_dir = tmp_path / "Documents" / "FolderA"
+    existing_dest_dir.mkdir(parents=True, exist_ok=True)
+    (existing_dest_dir / "doc.pdf").write_text("existing", encoding="utf-8")
+
+    op = MoveOperation(
+        source_path=tmp_path / "doc.pdf",
+        target_category="Documents",
+        target_path=tmp_path / "Documents" / "doc.pdf",
+        intended_path=tmp_path / "Documents" / "doc.pdf",
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        collision_detected=False,
+    )
+    executor = MagicMock()
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
+
+    async with app.run_test() as pilot:
+        app.action_edit_destination()
+        await pilot.pause()
+        assert isinstance(app.screen, EditDestinationModal)
+
+        input_widget = app.screen.query_one("#dest-input", Input)
+        input_widget.value = "Documents/FolderA"
+        save_btn = app.screen.query_one("#save-btn", Button)
+        await pilot.click(save_btn)
+        await pilot.pause()
+
+        assert app.plan[0].collision_detected is True
+        assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
+        assert app.plan[0].intended_path == existing_dest_dir / "doc.pdf"
+        assert app.plan[0].target_path == existing_dest_dir / "doc (1).pdf"
+
+
+@pytest.mark.asyncio
+async def test_tui_cycle_collision_updates_target_path_intended_and_resolved(tmp_path: Path):
+    dest_dir = tmp_path / "Documents"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    existing_file = dest_dir / "report.pdf"
+    existing_file.write_text("existing", encoding="utf-8")
+
+    intended = dest_dir / "report.pdf"
+    resolved = dest_dir / "report (1).pdf"
+
+    op = MoveOperation(
+        source_path=tmp_path / "report.pdf",
+        target_category="Documents",
+        target_path=resolved,
+        intended_path=intended,
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        collision_detected=True,
+        collision_action=CollisionAction.AUTO_RENAME,
+    )
+    executor = MagicMock()
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
+
+    async with app.run_test() as pilot:
+        # Initially AUTO_RENAME with resolved target path
+        assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
+        assert app.plan[0].target_path == resolved
+
+        # Cycle to SKIP -> should switch to intended_path
+        app.action_cycle_collision()
+        assert app.plan[0].collision_action == CollisionAction.SKIP
+        assert app.plan[0].target_path == intended
+
+        # Cycle to OVERWRITE -> should remain intended_path
+        app.action_cycle_collision()
+        assert app.plan[0].collision_action == CollisionAction.OVERWRITE
+        assert app.plan[0].target_path == intended
+
+        # Cycle back to AUTO_RENAME -> should re-resolve to name (1)
+        app.action_cycle_collision()
+        assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
+        assert app.plan[0].target_path == resolved
+

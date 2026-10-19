@@ -409,3 +409,129 @@ def test_move_failure_logs_warning(monkeypatch, tmp_path: Path, caplog):
 
     assert len(session.operations) == 0
     assert any("Failed to move" in record.message for record in caplog.records)
+
+
+def test_undo_session_collision_restoration(tmp_path: Path):
+    source_file = tmp_path / "notes.txt"
+    source_file.write_text("original content", encoding="utf-8")
+    dest_path = tmp_path / "Docs" / "notes.txt"
+
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Docs",
+        target_path=dest_path,
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        is_selected=True,
+    )
+    journal_path = tmp_path / "history.json"
+    executor = SafeExecutor(journal_path=journal_path)
+    executor.execute_plan([op], target_dir=tmp_path)
+    assert dest_path.exists()
+
+    # Now create a new file at original path to simulate a collision during undo
+    source_file.write_text("new occupant at original location", encoding="utf-8")
+
+    # Also create notes_restored.txt to test incrementing to (1)
+    (tmp_path / "notes_restored.txt").write_text("existing restored", encoding="utf-8")
+
+    restored = executor.undo_session()
+    assert restored == 1
+    # Original should be untouched
+    assert source_file.read_text(encoding="utf-8") == "new occupant at original location"
+    # Existing notes_restored.txt should be untouched
+    assert (tmp_path / "notes_restored.txt").read_text(encoding="utf-8") == "existing restored"
+    # Restored file should be renamed to notes_restored (1).txt
+    expected_restored = tmp_path / "notes_restored (1).txt"
+    assert expected_restored.exists()
+    assert expected_restored.read_text(encoding="utf-8") == "original content"
+
+
+def test_undo_session_collision_restoration_compound_ext(tmp_path: Path):
+    source_file = tmp_path / "archive.tar.gz"
+    source_file.write_text("tar content", encoding="utf-8")
+    dest_path = tmp_path / "Archives" / "archive.tar.gz"
+
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Archives",
+        target_path=dest_path,
+        source=ClassificationSource.HEURISTIC,
+        reason="Archive match",
+        is_selected=True,
+    )
+    journal_path = tmp_path / "history.json"
+    executor = SafeExecutor(journal_path=journal_path)
+    executor.execute_plan([op], target_dir=tmp_path)
+    assert dest_path.exists()
+
+    # Create collision at original location
+    source_file.write_text("collision occupant", encoding="utf-8")
+
+    restored = executor.undo_session()
+    assert restored == 1
+    assert source_file.read_text(encoding="utf-8") == "collision occupant"
+    restored_file = tmp_path / "archive_restored.tar.gz"
+    assert restored_file.exists()
+    assert restored_file.read_text(encoding="utf-8") == "tar content"
+
+
+def test_execute_plan_defensive_auto_rename_on_collision(tmp_path: Path):
+    source_file = tmp_path / "data.csv"
+    source_file.write_text("new data", encoding="utf-8")
+
+    dest_dir = tmp_path / "Data"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    existing_dest = dest_dir / "data.csv"
+    existing_dest.write_text("existing data", encoding="utf-8")
+
+    # Operation has target_path pointing to existing_dest with AUTO_RENAME
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Data",
+        target_path=existing_dest,
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        collision_detected=True,
+        collision_action=CollisionAction.AUTO_RENAME,
+        is_selected=True,
+    )
+    executor = SafeExecutor(journal_path=tmp_path / "history.json")
+    session = executor.execute_plan([op], target_dir=tmp_path)
+
+    assert len(session.operations) == 1
+    # Existing data should not be overwritten
+    assert existing_dest.read_text(encoding="utf-8") == "existing data"
+    # New file should be moved to data (1).csv
+    renamed_dest = dest_dir / "data (1).csv"
+    assert renamed_dest.exists()
+    assert renamed_dest.read_text(encoding="utf-8") == "new data"
+
+
+def test_execute_plan_defensive_skip_on_collision_with_intended_path(tmp_path: Path):
+    source_file = tmp_path / "report.pdf"
+    source_file.write_text("report data", encoding="utf-8")
+
+    dest_dir = tmp_path / "Docs"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    existing_file = dest_dir / "report.pdf"
+    existing_file.write_text("already there", encoding="utf-8")
+
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Docs",
+        target_path=existing_file,
+        intended_path=existing_file,
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        collision_detected=True,
+        collision_action=CollisionAction.SKIP,
+        is_selected=True,
+    )
+    executor = SafeExecutor(journal_path=tmp_path / "history.json")
+    session = executor.execute_plan([op], target_dir=tmp_path)
+
+    # Skipped: nothing moved
+    assert len(session.operations) == 0
+    assert source_file.exists()
+    assert existing_file.read_text(encoding="utf-8") == "already there"

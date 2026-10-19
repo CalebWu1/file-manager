@@ -93,3 +93,18 @@ def test_heuristic_empty_extension_returns_none():
         modified_time=0.0
     )
     assert engine.classify(item) is None
+
+
+def test_heuristic_dot_normalization():
+    engine = HeuristicEngine()
+    item = FileItem(
+        path=Path("archive.zip"),
+        filename="archive.zip",
+        extension="zip",
+        size_bytes=50000,
+        modified_time=0.0,
+    )
+    result = engine.classify(item)
+    assert result is not None
+    assert result.category == "Archives"
+

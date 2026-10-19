@@ -53,9 +53,12 @@ class LLMClassifier:
             data = json.loads(raw_content)
 
             results: Dict[str, ClassificationResult] = {}
+            valid_names = {item.filename for item in items}
             for entry in data.get("classifications", []):
+                if not isinstance(entry, dict):
+                    continue
                 fname = entry.get("filename")
-                if fname:
+                if fname and fname in valid_names:
                     cat_raw = entry.get("category")
                     category = (cat_raw or "Documents").strip().title()
                     sub_raw = entry.get("subfolder")

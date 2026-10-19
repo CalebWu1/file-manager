@@ -41,7 +41,7 @@ class Scanner:
             ext = suffixes if suffixes in {".tar.gz", ".tar.bz2", ".tar.xz"} else entry.suffix.lower()
 
             # Skip active downloads
-            if ext in self.IGNORED_EXTENSIONS or any(name.endswith(e) for e in self.IGNORED_EXTENSIONS):
+            if ext in self.IGNORED_EXTENSIONS or any(lower_name.endswith(e) for e in self.IGNORED_EXTENSIONS):
                 continue
 
             try:

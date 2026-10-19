@@ -211,3 +211,37 @@ def test_classify_batch_null_subfolder_and_category():
         assert results["doc.pdf"].reason == "Classified by Llama 3.2"
         assert results["doc.pdf"].source == ClassificationSource.LLM
 
+
+def test_classify_batch_filters_hallucinated_filenames_and_non_dicts():
+    classifier = LLMClassifier()
+    real_item = FileItem(
+        path=Path("real.pdf"),
+        filename="real.pdf",
+        extension=".pdf",
+        size_bytes=100,
+        modified_time=0.0,
+    )
+    items = [real_item]
+
+    mock_response = {
+        "message": {
+            "content": json.dumps({
+                "classifications": [
+                    "invalid non-dict entry",
+                    None,
+                    {"filename": "hallucinated.pdf", "category": "Documents", "reason": "Not in items"},
+                    {"filename": "real.pdf", "category": "Documents", "subfolder": "Work", "reason": "Real doc"},
+                ]
+            })
+        }
+    }
+
+    with patch.object(classifier.client, "chat", return_value=mock_response):
+        results = classifier.classify_batch(items)
+        assert len(results) == 1
+        assert "real.pdf" in results
+        assert "hallucinated.pdf" not in results
+        assert results["real.pdf"].subfolder == "Work"
+        assert results["real.pdf"].source == ClassificationSource.LLM
+
+

@@ -4,8 +4,9 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Set
 from folder_organizer.models import MoveOperation, SessionJournal, CollisionAction
+from folder_organizer.planner import PlanBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ class SafeExecutor:
             counter += 1
 
         operations_log = []
+        executed_targets: Set[Path] = set()
 
         for op in plan:
             if not op.is_selected:
@@ -78,8 +80,12 @@ class SafeExecutor:
                 continue
 
             dest = op.target_path
-            if dest.exists() and op.collision_action == CollisionAction.SKIP:
-                continue
+            if op.collision_action == CollisionAction.SKIP:
+                if dest.exists() or (op.intended_path and op.intended_path.exists()) or op.collision_detected:
+                    continue
+            elif op.collision_action == CollisionAction.AUTO_RENAME:
+                if dest.exists() or dest in executed_targets:
+                    dest = PlanBuilder().resolve_target_path(dest, occupied=executed_targets)
 
             src_resolved = op.source_path.resolve()
             dest_resolved = dest.resolve()
@@ -90,6 +96,7 @@ class SafeExecutor:
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
                 shutil.move(str(op.source_path), str(dest))
+                executed_targets.add(dest_resolved)
                 operations_log.append({
                     "from": str(src_resolved),
                     "to": str(dest_resolved),
@@ -140,6 +147,8 @@ class SafeExecutor:
         operations = session_data.get("operations", [])
         restored = 0
         created_dirs = set()
+        restored_targets: Set[Path] = set()
+        compound_exts = (".tar.gz", ".tar.bz2", ".tar.xz")
 
         for op in reversed(operations):
             src_str = op["to"]
@@ -149,12 +158,31 @@ class SafeExecutor:
 
             if src.exists():
                 orig.parent.mkdir(parents=True, exist_ok=True)
+                dest_orig = orig
+                if dest_orig.exists() or dest_orig in restored_targets:
+                    lower_name = orig.name.lower()
+                    comp_ext = next((ext for ext in compound_exts if lower_name.endswith(ext)), None)
+                    if comp_ext:
+                        stem = orig.name[:-len(comp_ext)]
+                        suffix = orig.name[-len(comp_ext):]
+                    else:
+                        stem = orig.stem
+                        suffix = orig.suffix
+
+                    candidate = orig.parent / f"{stem}_restored{suffix}"
+                    counter = 1
+                    while candidate.exists() or candidate in restored_targets:
+                        candidate = orig.parent / f"{stem}_restored ({counter}){suffix}"
+                        counter += 1
+                    dest_orig = candidate
+
                 try:
-                    shutil.move(str(src), str(orig))
+                    shutil.move(str(src), str(dest_orig))
+                    restored_targets.add(dest_orig.resolve())
                     restored += 1
                     created_dirs.add(src.parent)
                 except Exception as e:
-                    logger.warning("Failed to restore %s to %s: %s", src, orig, e)
+                    logger.warning("Failed to restore %s to %s: %s", src, dest_orig, e)
                     continue
 
         # Clean up empty parent directories created during sorting
