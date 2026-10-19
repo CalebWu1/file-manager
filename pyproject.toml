@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "folder-organizer"
+version = "0.1.0"
+description = "Local LLM-powered folder organizer with interactive TUI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "textual>=0.70.0",
+    "ollama>=0.3.0",
+    "pypdf>=4.0",
+    "click>=8.1"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0"
+]
+
+[project.scripts]
+folder-organizer = "folder_organizer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["folder_organizer*"]
