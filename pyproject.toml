@@ -13,7 +13,8 @@ dependencies = [
     "textual>=0.70.0",
     "ollama>=0.3.0",
     "pypdf>=4.0",
-    "click>=8.1"
+    "click>=8.1",
+    "send2trash>=1.8.0"
 ]
 
 [project.optional-dependencies]
