@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import logging
 import pytest
 from folder_organizer.models import MoveOperation, ClassificationSource, CollisionAction
 from folder_organizer.executor import SafeExecutor
@@ -57,6 +58,7 @@ def test_execute_plan_skips_unselected(tmp_path: Path):
     assert source_file.exists()
     assert not dest_path.exists()
     assert len(session.operations) == 0
+    assert len(executor._load_history()) == 0
 
 
 def test_execute_plan_skips_nonexistent_source(tmp_path: Path):
@@ -77,6 +79,7 @@ def test_execute_plan_skips_nonexistent_source(tmp_path: Path):
 
     session = executor.execute_plan([op], target_dir=tmp_path)
     assert len(session.operations) == 0
+    assert len(executor._load_history()) == 0
 
 
 def test_execute_plan_collision_skip(tmp_path: Path):
@@ -104,6 +107,7 @@ def test_execute_plan_collision_skip(tmp_path: Path):
     assert source_file.exists()
     assert dest_path.read_text(encoding="utf-8") == "existing content"
     assert len(session.operations) == 0
+    assert len(executor._load_history()) == 0
 
 
 def test_execute_plan_collision_overwrite(tmp_path: Path):
@@ -131,6 +135,83 @@ def test_execute_plan_collision_overwrite(tmp_path: Path):
     assert not source_file.exists()
     assert dest_path.read_text(encoding="utf-8") == "new content"
     assert len(session.operations) == 1
+    assert len(executor._load_history()) == 1
+
+
+def test_execute_empty_plan_does_not_persist_session(tmp_path: Path):
+    journal_path = tmp_path / "history.json"
+    executor = SafeExecutor(journal_path=journal_path)
+
+    # 1. Execute an empty plan
+    session = executor.execute_plan([], target_dir=tmp_path)
+    assert len(session.operations) == 0
+    assert len(executor._load_history()) == 0
+
+    # 2. Execute a valid move
+    source_file = tmp_path / "real.txt"
+    source_file.write_text("data", encoding="utf-8")
+    dest_path = tmp_path / "Docs" / "real.txt"
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Docs",
+        target_path=dest_path,
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        is_selected=True,
+    )
+    executor.execute_plan([op], target_dir=tmp_path)
+    assert len(executor._load_history()) == 1
+
+    # 3. Execute another empty plan
+    executor.execute_plan([], target_dir=tmp_path)
+    assert len(executor._load_history()) == 1
+
+    # 4. Undo should restore the real move without being blocked by empty run
+    restored = executor.undo_session()
+    assert restored == 1
+    assert source_file.exists()
+    assert not dest_path.exists()
+    assert len(executor._load_history()) == 0
+
+
+def test_undo_session_prunes_empty_sessions_in_history(tmp_path: Path):
+    journal_path = tmp_path / "history.json"
+    executor = SafeExecutor(journal_path=journal_path)
+
+    # Seed history with an empty session followed by another empty session
+    seeded_history = [
+        {"session_id": "empty_1", "timestamp": "2026-01-01", "target_dir": str(tmp_path), "operations": []},
+        {"session_id": "empty_2", "timestamp": "2026-01-02", "target_dir": str(tmp_path), "operations": []},
+    ]
+    executor._save_history(seeded_history)
+
+    # undo_session should prune empty sessions and return 0
+    assert executor.undo_session() == 0
+    assert executor._load_history() == []
+
+    # Now seed with a real session preceded and followed by empty sessions
+    f = tmp_path / "test.txt"
+    dest = tmp_path / "Docs" / "test.txt"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("hello", encoding="utf-8")
+
+    seeded_history_2 = [
+        {"session_id": "empty_1", "timestamp": "2026-01-01", "target_dir": str(tmp_path), "operations": []},
+        {
+            "session_id": "real_1",
+            "timestamp": "2026-01-02",
+            "target_dir": str(tmp_path),
+            "operations": [{"from": str(f.resolve()), "to": str(dest.resolve())}],
+        },
+        {"session_id": "empty_2", "timestamp": "2026-01-03", "target_dir": str(tmp_path), "operations": []},
+    ]
+    executor._save_history(seeded_history_2)
+
+    # undo_session should locate and undo real_1
+    restored = executor.undo_session()
+    assert restored == 1
+    assert f.exists()
+    assert not dest.exists()
 
 
 def test_undo_session_by_id(tmp_path: Path):
@@ -298,3 +379,33 @@ def test_default_journal_path(monkeypatch, tmp_path: Path):
     expected_path = fake_home / ".folder_organizer" / "history.json"
     assert executor.journal_path == expected_path
     assert expected_path.parent.exists()
+
+
+def test_move_failure_logs_warning(monkeypatch, tmp_path: Path, caplog):
+    source_file = tmp_path / "fail.txt"
+    source_file.write_text("data", encoding="utf-8")
+    dest_path = tmp_path / "Docs" / "fail.txt"
+
+    op = MoveOperation(
+        source_path=source_file,
+        target_category="Docs",
+        target_path=dest_path,
+        source=ClassificationSource.HEURISTIC,
+        reason="Rule match",
+        is_selected=True,
+    )
+
+    def mock_move(src, dst):
+        raise PermissionError("Access denied simulated")
+
+    import shutil
+    monkeypatch.setattr(shutil, "move", mock_move)
+
+    journal_path = tmp_path / "history.json"
+    executor = SafeExecutor(journal_path=journal_path)
+
+    with caplog.at_level(logging.WARNING):
+        session = executor.execute_plan([op], target_dir=tmp_path)
+
+    assert len(session.operations) == 0
+    assert any("Failed to move" in record.message for record in caplog.records)

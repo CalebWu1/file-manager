@@ -1,9 +1,13 @@
 import json
+import logging
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Union
 from folder_organizer.models import MoveOperation, SessionJournal, CollisionAction
+
+logger = logging.getLogger(__name__)
 
 
 class SafeExecutor:
@@ -28,8 +32,18 @@ class SafeExecutor:
             return []
 
     def _save_history(self, history: List[Dict]) -> None:
-        with open(self.journal_path, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2)
+        temp_file = self.journal_path.with_suffix(f".tmp.{os.getpid()}")
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(history, f, indent=2)
+            os.replace(temp_file, self.journal_path)
+        except Exception:
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except OSError:
+                    pass
+            raise
 
     def execute_plan(
         self,
@@ -80,8 +94,8 @@ class SafeExecutor:
                     "from": str(src_resolved),
                     "to": str(dest_resolved),
                 })
-            except Exception:
-                # Log error and continue with remaining batch
+            except Exception as e:
+                logger.warning("Failed to move %s to %s: %s", op.source_path, dest, e)
                 continue
 
         session = SessionJournal(
@@ -91,19 +105,32 @@ class SafeExecutor:
             operations=operations_log,
         )
 
-        history.append(session.model_dump())
-        self._save_history(history)
+        # Only persist to history journal if actual moves were performed
+        if operations_log:
+            history.append(session.model_dump())
+            self._save_history(history)
+
         return session
 
     def undo_session(self, session_id: Optional[str] = None) -> int:
-        history = self._load_history()
+        raw_history = self._load_history()
+        if not raw_history:
+            return 0
+
+        # Clean up any empty session entries in history
+        history = [
+            sess for sess in raw_history
+            if isinstance(sess, dict) and len(sess.get("operations", [])) > 0
+        ]
         if not history:
+            if len(raw_history) != len(history):
+                self._save_history([])
             return 0
 
         target_idx = -1
         if session_id:
             for i, sess in enumerate(history):
-                if isinstance(sess, dict) and sess.get("session_id") == session_id:
+                if sess.get("session_id") == session_id:
                     target_idx = i
                     break
         if target_idx == -1 and session_id:
@@ -126,7 +153,8 @@ class SafeExecutor:
                     shutil.move(str(src), str(orig))
                     restored += 1
                     created_dirs.add(src.parent)
-                except Exception:
+                except Exception as e:
+                    logger.warning("Failed to restore %s to %s: %s", src, orig, e)
                     continue
 
         # Clean up empty parent directories created during sorting
