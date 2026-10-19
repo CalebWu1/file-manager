@@ -116,11 +116,12 @@ def test_cli_tui_launch(tmp_path: Path):
         mock_app_run.assert_called_once()
 
 
-def test_cli_undo_empty():
-    runner = CliRunner()
-    result = runner.invoke(main, ["undo"])
-    assert result.exit_code == 0
-    assert "No files were restored. History is empty or session not found." in result.output
+def test_cli_undo_empty(tmp_path: Path):
+    with patch("pathlib.Path.home", return_value=tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(main, ["undo"])
+        assert result.exit_code == 0
+        assert "No files were restored. History is empty or session not found." in result.output
 
 
 def test_cli_undo_success(tmp_path: Path):
