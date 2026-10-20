@@ -266,6 +266,7 @@ class OrganizerApp(App):
                             op.target_path = PlanBuilder().resolve_target_path(intended_path)
                         else:
                             op.target_path = intended_path
+                        op.action = ActionType.MOVE
                         self._refresh_table()
                         if table.cursor_row is not None:
                             self._update_preview(table.cursor_row)
@@ -283,7 +284,7 @@ class OrganizerApp(App):
         def on_confirmed(confirmed: Optional[bool]) -> None:
             if confirmed:
                 has_trash = any(getattr(op, "action", None) == ActionType.TRASH for op in selected)
-                if has_trash or (self.active_intent and self.active_intent.action == ActionType.TRASH):
+                if has_trash or (self.active_intent is not None) or (self.active_query is not None):
                     action_plan = [
                         ActionOperation(
                             source_path=op.source_path,

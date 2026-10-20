@@ -222,3 +222,96 @@ async def test_tui_query_clear_filter_on_escape(tmp_path: Path):
         assert table.row_count == 2
         # Banner should be cleared
         assert "find all installers" not in str(banner.render())
+
+
+@pytest.mark.asyncio
+async def test_tui_query_edit_destination_converts_trash_to_move(tmp_path: Path):
+    from folder_organizer.tui.screens import EditDestinationModal
+
+    file1 = tmp_path / "installer.msi"
+    file1.write_bytes(b"msi content")
+
+    op = MoveOperation(
+        source_path=file1,
+        target_category="Software",
+        target_path=tmp_path / "Software" / "installer.msi",
+        source=ClassificationSource.HEURISTIC,
+        reason="MSI installer",
+        is_selected=True,
+    )
+
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
+
+    async with app.run_test() as pilot:
+        # 1. Apply TRASH query
+        await pilot.press("slash")
+        inp = app.screen.query_one("#query-input", Input)
+        inp.value = "trash installers"
+        await pilot.press("enter")
+
+        assert app.plan[0].action == ActionType.TRASH
+        table = app.query_one(DataTable)
+        row = table.get_row("0")
+        assert "[TRASH]" in row[2] or "[TRASH]" in row[3]
+
+        # 2. Press 'e' to edit destination
+        await pilot.press("e")
+        assert isinstance(app.screen, EditDestinationModal)
+
+        dest_inp = app.screen.query_one("#dest-input", Input)
+        dest_inp.value = "Archived"
+        await pilot.press("enter")
+
+        # 3. Verify modal dismissed and op converted to MOVE
+        assert len(app.screen_stack) == 1
+        assert app.plan[0].action == ActionType.MOVE
+        assert app.plan[0].target_category == "Archived"
+        assert app.plan[0].target_path == tmp_path / "Archived" / "installer.msi"
+
+        # 4. Table should show [MOVE] badge and Archived destination, not [TRASH]
+        table = app.query_one(DataTable)
+        row = table.get_row("0")
+        assert "[MOVE]" in row[3]
+        assert "Archived" in row[2]
+        assert "[TRASH]" not in row[2]
+        assert "[TRASH]" not in row[3]
+
+
+@pytest.mark.asyncio
+async def test_tui_query_confirm_execute_persists_query_prompt(tmp_path: Path, monkeypatch):
+    file1 = tmp_path / "setup.exe"
+    file1.write_bytes(b"setup content")
+
+    op = MoveOperation(
+        source_path=file1,
+        target_category="Software",
+        target_path=tmp_path / "Software" / "setup.exe",
+        source=ClassificationSource.HEURISTIC,
+        reason="Installer",
+        is_selected=True,
+    )
+
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
+
+    captured_prompt = []
+    def mock_execute_action_plan(self, plan, target_dir, query_prompt=None):
+        captured_prompt.append(query_prompt)
+        return []
+
+    from folder_organizer.executor import SafeExecutor
+    monkeypatch.setattr(SafeExecutor, "execute_action_plan", mock_execute_action_plan)
+
+    async with app.run_test() as pilot:
+        # Apply query
+        await pilot.press("slash")
+        inp = app.screen.query_one("#query-input", Input)
+        inp.value = "find all installers"
+        await pilot.press("enter")
+
+        # Confirm execute
+        await pilot.press("x")
+        # In confirm modal, press Enter on Execute button
+        await pilot.press("enter")
+
+        assert len(captured_prompt) == 1
+        assert captured_prompt[0] == "find all installers"
