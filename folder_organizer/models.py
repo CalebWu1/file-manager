@@ -50,15 +50,16 @@ class ClassificationResult(BaseModel):
 
 class MoveOperation(BaseModel):
     source_path: Path
-    target_category: str
+    target_category: str = "General"
     target_subfolder: Optional[str] = None
-    target_path: Path
+    target_path: Optional[Path] = None
     intended_path: Optional[Path] = None
-    source: ClassificationSource
-    reason: str
+    source: ClassificationSource = ClassificationSource.HEURISTIC
+    reason: str = ""
     collision_detected: bool = False
     collision_action: CollisionAction = CollisionAction.AUTO_RENAME
     is_selected: bool = True
+    action: ActionType = ActionType.MOVE
 
 
 class SessionJournal(BaseModel):

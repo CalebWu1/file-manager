@@ -3,10 +3,18 @@ from typing import List, Optional
 from textual.app import App, ComposeResult
 from textual.css.query import NoMatches
 from textual.widgets import Header, Footer, DataTable, Static, Label
-from folder_organizer.models import MoveOperation, CollisionAction
+from folder_organizer.models import (
+    MoveOperation,
+    CollisionAction,
+    ActionOperation,
+    ActionType,
+    ScannedItem,
+    ClassificationSource,
+)
 from folder_organizer.executor import SafeExecutor
 from folder_organizer.planner import PlanBuilder
-from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal
+from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal, QueryModal
+from folder_organizer.query import KeywordFallbackCompiler, QueryCompiler, FilterEngine
 from folder_organizer.utils.file_peek import extract_content_peek
 
 
@@ -23,9 +31,14 @@ class OrganizerApp(App):
         border: solid cyan;
         padding: 0 1;
     }
-    #edit-dialog, #confirm-dialog {
+    #query-banner {
+        background: $accent;
+        color: $text;
+        padding: 0 1;
+    }
+    #edit-dialog, #confirm-dialog, #query-dialog {
         padding: 1 2;
-        width: 60;
+        width: 80;
         height: auto;
         border: thick $primary;
         background: $surface;
@@ -33,6 +46,8 @@ class OrganizerApp(App):
     """
 
     BINDINGS = [
+        ("slash", "open_query", "Query / Search"),
+        ("escape", "clear_query", "Clear Filter"),
         ("space", "toggle_selection", "Toggle Include"),
         ("e", "edit_destination", "Edit Folder"),
         ("c", "cycle_collision", "Cycle Conflict Action"),
@@ -41,16 +56,71 @@ class OrganizerApp(App):
         ("q", "quit", "Quit"),
     ]
 
-    def __init__(self, plan: List[MoveOperation], target_dir: Path, executor: SafeExecutor):
+    def __init__(
+        self,
+        plan: List[MoveOperation],
+        target_dir: Path,
+        executor: Optional[SafeExecutor] = None,
+        no_llm: bool = False,
+        model: str = "llama3.2",
+        host: str = "http://localhost:11434",
+        scanned_items: Optional[List[ScannedItem]] = None,
+    ):
         super().__init__()
         self.plan = plan
+        self.original_plan = [op.model_copy(deep=True) for op in plan]
         self.target_dir = Path(target_dir)
-        self.executor = executor
+        self.executor = executor or SafeExecutor()
         self.executed = False
+        self.no_llm = no_llm
+        self.model = model
+        self.host = host
+        self.active_query: Optional[str] = None
+        self.active_intent = None
+
+        if scanned_items is not None:
+            self.scanned_items = list(scanned_items)
+        else:
+            self.scanned_items = []
+            for op in self.original_plan:
+                p = op.source_path
+                size = 0
+                mtime = 0.0
+                peek = None
+                try:
+                    if p.exists():
+                        st = p.stat()
+                        size = st.st_size
+                        mtime = st.st_mtime
+                        peek = extract_content_peek(p)
+                except Exception:
+                    pass
+                lower_name = p.name.lower()
+                ext = ""
+                for ce in (".tar.gz", ".tar.bz2", ".tar.xz"):
+                    if lower_name.endswith(ce):
+                        ext = ce
+                        break
+                if not ext:
+                    ext = p.suffix.lower()
+                self.scanned_items.append(
+                    ScannedItem(
+                        path=p,
+                        filename=p.name,
+                        extension=ext,
+                        size_bytes=size,
+                        modified_time=mtime,
+                        content_peek=peek,
+                    )
+                )
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Label(f"Target: [b]{self.target_dir}[/b] | Press [b]Space[/b] to toggle, [b]e[/b] to edit, [b]x[/b] to execute")
+        yield Label(
+            f"Target: [b]{self.target_dir}[/b] | Press [b]/[/b] to query, [b]Space[/b] to toggle, [b]e[/b] to edit, [b]x[/b] to execute",
+            id="status-label",
+        )
+        yield Label("", id="query-banner")
         yield DataTable(id="table")
         yield Static("Select a row to preview file contents.", id="preview-box")
         yield Footer()
@@ -77,8 +147,9 @@ class OrganizerApp(App):
                     first_line = peek.splitlines()[0][:80].strip()
                     if first_line:
                         snippet_line = f"\n[b]Preview:[/b] {first_line}"
+                target_disp = op.target_path if op.target_path else "[TRASH] (Recycle Bin)"
                 box.update(
-                    f"[b]Source:[/b] {op.source_path}\n[b]Target:[/b] {op.target_path}\n[b]Reason:[/b] {op.reason}{snippet_line}"
+                    f"[b]Source:[/b] {op.source_path}\n[b]Target:[/b] {target_disp}\n[b]Reason:[/b] {op.reason}{snippet_line}"
                 )
             except NoMatches:
                 pass
@@ -92,13 +163,33 @@ class OrganizerApp(App):
         table.clear()
         for i, op in enumerate(self.plan):
             include_str = "[X]" if op.is_selected else "[ ]"
-            try:
-                rel_dest = str(op.target_path.relative_to(self.target_dir))
-            except ValueError:
-                rel_dest = str(op.target_path)
-            engine = op.source.value if op.source else "unknown"
+            op_action = getattr(op, "action", ActionType.MOVE)
+
+            if op_action == ActionType.TRASH:
+                rel_dest = "[TRASH]"
+                engine = "[TRASH]"
+            elif self.active_query is not None and op_action == ActionType.MOVE:
+                try:
+                    rel_dest = str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                except (ValueError, AttributeError):
+                    rel_dest = str(op.target_path) if op.target_path else "-"
+                engine = "[MOVE]"
+            elif self.active_query is not None and op_action == ActionType.FIND:
+                try:
+                    rel_dest = str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                except (ValueError, AttributeError):
+                    rel_dest = str(op.target_path) if op.target_path else "-"
+                engine = "[FIND]"
+            else:
+                try:
+                    rel_dest = str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                except (ValueError, AttributeError):
+                    rel_dest = str(op.target_path) if op.target_path else "-"
+                engine = op.source.value if getattr(op, "source", None) else "unknown"
+
             collision_str = op.collision_action.value if op.collision_detected else "None"
             table.add_row(include_str, op.source_path.name, rel_dest, engine, collision_str, op.reason, key=str(i))
+
         if prev_cursor_row is not None and prev_cursor_row < len(self.plan):
             table.move_cursor(row=prev_cursor_row)
 
@@ -191,8 +282,118 @@ class OrganizerApp(App):
 
         def on_confirmed(confirmed: Optional[bool]) -> None:
             if confirmed:
-                self.executor.execute_plan(self.plan, self.target_dir)
+                has_trash = any(getattr(op, "action", None) == ActionType.TRASH for op in selected)
+                if has_trash or (self.active_intent and self.active_intent.action == ActionType.TRASH):
+                    action_plan = [
+                        ActionOperation(
+                            source_path=op.source_path,
+                            action=getattr(op, "action", ActionType.MOVE),
+                            target_path=op.target_path,
+                            intended_path=op.intended_path,
+                            collision_action=op.collision_action,
+                            collision_detected=op.collision_detected,
+                            selected=op.is_selected,
+                            match_reason=op.reason,
+                        )
+                        for op in selected
+                    ]
+                    self.executor.execute_action_plan(action_plan, self.target_dir, query_prompt=self.active_query)
+                else:
+                    self.executor.execute_plan(self.plan, self.target_dir)
                 self.executed = True
                 self.exit(result=True)
 
         self.push_screen(ConfirmExecutionModal(len(selected), collisions), on_confirmed)
+
+    def action_open_query(self) -> None:
+        def on_query_submitted(query_str: Optional[str]) -> None:
+            if query_str:
+                self.apply_query(query_str)
+
+        self.push_screen(QueryModal(), on_query_submitted)
+
+    def apply_query(self, query_str: str) -> None:
+        self.active_query = query_str
+        if self.no_llm:
+            compiler = KeywordFallbackCompiler()
+        else:
+            compiler = QueryCompiler(model=self.model, host=self.host)
+        intent = compiler.compile(query_str)
+        self.active_intent = intent
+
+        engine = FilterEngine(model=self.model, host=self.host)
+        action_ops = engine.filter_items(self.scanned_items, intent, self.target_dir)
+
+        action_ops_by_path = {act_op.source_path.resolve(): act_op for act_op in action_ops}
+
+        new_plan: List[MoveOperation] = []
+        for op in self.original_plan:
+            src_res = op.source_path.resolve()
+            if src_res in action_ops_by_path:
+                act_op = action_ops_by_path[src_res]
+                new_op = op.model_copy(deep=True)
+                new_op.action = act_op.action
+                new_op.reason = act_op.match_reason or intent.reasoning
+                if act_op.action == ActionType.TRASH:
+                    new_op.is_selected = True
+                    new_op.target_path = None
+                    new_op.target_category = "Trash"
+                elif act_op.action == ActionType.MOVE:
+                    new_op.is_selected = True
+                    new_op.target_path = act_op.target_path
+                    new_op.intended_path = act_op.intended_path
+                    new_op.collision_detected = act_op.collision_detected
+                    new_op.collision_action = act_op.collision_action
+                    if intent.destination_folder:
+                        new_op.target_category = intent.destination_folder
+                elif act_op.action == ActionType.FIND:
+                    new_op.action = ActionType.FIND
+                new_plan.append(new_op)
+
+        original_paths = {op.source_path.resolve() for op in self.original_plan}
+        for act_op in action_ops:
+            if act_op.source_path.resolve() not in original_paths:
+                new_op = MoveOperation(
+                    source_path=act_op.source_path,
+                    target_category=intent.destination_folder or ("Trash" if act_op.action == ActionType.TRASH else "Organized"),
+                    target_path=act_op.target_path or act_op.source_path,
+                    intended_path=act_op.intended_path,
+                    source=ClassificationSource.HEURISTIC if self.no_llm else ClassificationSource.LLM,
+                    reason=act_op.match_reason or intent.reasoning,
+                    collision_detected=act_op.collision_detected,
+                    collision_action=act_op.collision_action,
+                    is_selected=act_op.selected,
+                    action=act_op.action,
+                )
+                new_plan.append(new_op)
+
+        self.plan = new_plan
+
+        try:
+            banner = self.query_one("#query-banner", Label)
+            banner.update(
+                f"Active Query: [bold yellow]{self.active_query}[/bold yellow] ({len(self.plan)} match{'es' if len(self.plan) != 1 else ''}) | [b]Esc[/b] to clear"
+            )
+        except NoMatches:
+            pass
+
+        self._refresh_table()
+        if self.plan:
+            self._update_preview(0)
+
+    def action_clear_query(self) -> None:
+        if self.active_query is not None:
+            self.clear_query()
+
+    def clear_query(self) -> None:
+        self.active_query = None
+        self.active_intent = None
+        self.plan = [op.model_copy(deep=True) for op in self.original_plan]
+        try:
+            banner = self.query_one("#query-banner", Label)
+            banner.update("")
+        except NoMatches:
+            pass
+        self._refresh_table()
+        if self.plan:
+            self._update_preview(0)
