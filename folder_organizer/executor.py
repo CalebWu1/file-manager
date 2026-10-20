@@ -146,12 +146,16 @@ class SafeExecutor:
             if not op.selected:
                 continue
             src_resolved = op.source_path.resolve()
+            if src_resolved == target_dir_resolved:
+                raise ValueError(f"Cannot execute action on target directory itself: '{op.source_path}'")
             if not src_resolved.is_relative_to(target_dir_resolved):
                 raise ValueError(
                     f"Attempted path traversal: source path '{op.source_path}' is outside target directory '{target_dir}'"
                 )
             if op.action == ActionType.MOVE and op.target_path is not None:
                 dest_resolved = op.target_path.resolve()
+                if dest_resolved == target_dir_resolved:
+                    raise ValueError(f"Cannot execute action on target directory itself: '{op.target_path}'")
                 if not dest_resolved.is_relative_to(target_dir_resolved):
                     raise ValueError(
                         f"Attempted path traversal: target path '{op.target_path}' is outside target directory '{target_dir}'"
@@ -185,9 +189,10 @@ class SafeExecutor:
                 if op.target_path is None:
                     continue
 
-                dest = op.target_path
+                dest = op.target_path.resolve()
                 if op.collision_action == CollisionAction.SKIP:
-                    if dest.exists() or (op.intended_path and op.intended_path.exists()) or op.collision_detected:
+                    intended = op.intended_path.resolve() if op.intended_path else None
+                    if dest.exists() or (intended and intended.exists()) or op.collision_detected:
                         continue
                 elif op.collision_action == CollisionAction.AUTO_RENAME:
                     if dest.exists() or dest in executed_targets:
@@ -272,6 +277,7 @@ class SafeExecutor:
                 capture_output=True,
                 text=True,
                 timeout=5,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             return "RESTORED" in res.stdout
         except Exception as e:
@@ -309,7 +315,7 @@ class SafeExecutor:
         restored_targets: Set[Path] = set()
 
         for op in reversed(operations):
-            raw_action = op.get("action", ActionType.MOVE.value if isinstance(op.get("action"), str) else ActionType.MOVE)
+            raw_action = op.get("action") or ActionType.MOVE.value
             action_str = raw_action.value if hasattr(raw_action, "value") else str(raw_action).upper()
 
             if action_str == ActionType.TRASH.value:

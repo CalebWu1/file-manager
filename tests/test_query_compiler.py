@@ -153,3 +153,24 @@ def test_ollama_query_compiler_default_client():
         mock_client_cls.assert_called_once_with(host="http://custom-host:11434")
         assert compiler.host == "http://custom-host:11434"
         assert compiler.model == "llama3.2"
+
+
+def test_ollama_query_compiler_null_predicates():
+    mock_client = MagicMock()
+    mock_client.chat.return_value = {
+        "message": {
+            "content": """{
+                "action": "FIND",
+                "destination_folder": null,
+                "predicates": null,
+                "reasoning": "Find everything"
+            }"""
+        }
+    }
+
+    compiler = QueryCompiler(client=mock_client)
+    intent = compiler.compile("find all files")
+    assert intent.action == ActionType.FIND
+    assert intent.predicates.extensions == []
+    assert intent.predicates.name_patterns == []
+    assert intent.reasoning == "Find everything"

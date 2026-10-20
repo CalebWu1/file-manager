@@ -3,7 +3,7 @@ from pathlib import Path
 from folder_organizer.models import MoveOperation, ScannedItem, ClassificationSource, ActionType
 from folder_organizer.tui.app import OrganizerApp
 from folder_organizer.tui.screens import QueryModal
-from textual.widgets import DataTable, Label, Input
+from textual.widgets import DataTable, Label, Input, Static
 
 
 @pytest.mark.asyncio
@@ -315,3 +315,63 @@ async def test_tui_query_confirm_execute_persists_query_prompt(tmp_path: Path, m
 
         assert len(captured_prompt) == 1
         assert captured_prompt[0] == "find all installers"
+
+
+@pytest.mark.asyncio
+async def test_tui_query_trash_confirm_execute(tmp_path: Path, monkeypatch):
+    from folder_organizer.executor import SafeExecutor
+
+    file1 = tmp_path / "installer.msi"
+    file1.write_bytes(b"installer content")
+
+    op = MoveOperation(
+        source_path=file1,
+        target_path=None,
+        action=ActionType.TRASH,
+        reason="MSI installer",
+        is_selected=True,
+    )
+
+    journal_file = tmp_path / "history.json"
+    executor = SafeExecutor(journal_path=journal_file)
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor, no_llm=True)
+
+    trashed_files = []
+
+    def mock_send2trash(path_str):
+        trashed_files.append(path_str)
+
+    import send2trash
+    monkeypatch.setattr(send2trash, "send2trash", mock_send2trash)
+
+    async with app.run_test() as pilot:
+        await pilot.press("x")
+        await pilot.press("enter")
+
+        assert app.executed is True
+        assert len(trashed_files) == 1
+        assert trashed_files[0] == str(file1)
+
+        history = executor._load_history()
+        assert len(history) == 1
+        assert history[0]["operations"][0]["action"] == "TRASH"
+
+
+@pytest.mark.asyncio
+async def test_tui_query_empty_results_clears_preview(tmp_path: Path):
+    file1 = tmp_path / "doc.txt"
+    file1.write_bytes(b"some content")
+    op = MoveOperation(source_path=file1, target_path=tmp_path / "Docs" / "doc.txt", reason="Text doc")
+    app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
+
+    async with app.run_test() as pilot:
+        preview = app.query_one("#preview-box", Static)
+        assert "Source:" in str(preview.render())
+
+        await pilot.press("slash")
+        inp = app.screen.query_one("#query-input", Input)
+        inp.value = "find all installers"
+        await pilot.press("enter")
+
+        assert len(app.plan) == 0
+        assert "No files match query." in str(preview.render())

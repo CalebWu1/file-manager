@@ -139,7 +139,7 @@ Respond ONLY with valid JSON conforming to this schema. No markdown formatting."
 
             action = ActionType(data.get("action", "FIND").upper())
             dest = data.get("destination_folder")
-            pred_data = data.get("predicates", {})
+            pred_data = data.get("predicates") or {}
 
             predicates = QueryPredicates(
                 extensions=[e if e.startswith(".") else f".{e}" for e in pred_data.get("extensions", [])],

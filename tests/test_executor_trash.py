@@ -226,3 +226,47 @@ def test_undo_session_move_action_from_action_plan(tmp_path):
     assert restored == 1
     assert src_file.exists()
     assert not dest_file.exists()
+
+
+def test_executor_target_directory_itself_raises_error(tmp_path):
+    op = ActionOperation(
+        source_path=tmp_path,
+        action=ActionType.TRASH,
+        selected=True,
+    )
+    executor = SafeExecutor(journal_path=tmp_path / "history.json")
+    with pytest.raises(ValueError, match="Cannot execute action on target directory itself"):
+        executor.execute_action_plan([op], target_dir=tmp_path)
+
+
+def test_executor_collision_detection_with_relative_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file1.write_bytes(b"content 1")
+    file2.write_bytes(b"content 2")
+
+    rel_dest = Path("Dest") / "file.txt"
+    op1 = ActionOperation(
+        source_path=file1,
+        action=ActionType.MOVE,
+        target_path=rel_dest,
+        collision_action=CollisionAction.AUTO_RENAME,
+        selected=True,
+    )
+    op2 = ActionOperation(
+        source_path=file2,
+        action=ActionType.MOVE,
+        target_path=rel_dest,
+        collision_action=CollisionAction.AUTO_RENAME,
+        selected=True,
+    )
+
+    executor = SafeExecutor(journal_path=tmp_path / "history.json")
+    journal = executor.execute_action_plan([op1, op2], target_dir=tmp_path)
+
+    assert len(journal) == 2
+    assert (tmp_path / "Dest" / "file.txt").exists()
+    assert (tmp_path / "Dest" / "file.txt").read_bytes() == b"content 1"
+    assert (tmp_path / "Dest" / "file (1).txt").exists()
+    assert (tmp_path / "Dest" / "file (1).txt").read_bytes() == b"content 2"

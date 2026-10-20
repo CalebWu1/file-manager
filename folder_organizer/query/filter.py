@@ -22,8 +22,6 @@ logger = logging.getLogger(__name__)
 class FilterEngine:
     """Evaluates compiled query predicates and semantic checks against directory files."""
 
-    COMPOUND_EXTENSIONS = [".tar.gz", ".tar.bz2", ".tar.xz"]
-
     def __init__(
         self,
         ollama_client: Optional[Any] = None,
@@ -60,7 +58,10 @@ class FilterEngine:
         )
         content = response.get("message", {}).get("content", "{}")
         data = json.loads(content)
-        return bool(data.get("matches", False))
+        matches_val = data.get("matches", False)
+        if isinstance(matches_val, str):
+            return matches_val.strip().lower() in ("true", "1", "yes")
+        return bool(matches_val)
 
     def _matches_predicates(self, item: ScannedItem, intent: QueryIntent) -> tuple[bool, str]:
         pred = intent.predicates
@@ -92,6 +93,13 @@ class FilterEngine:
         if pred.max_size_bytes is not None and item.size_bytes > pred.max_size_bytes:
             return False, ""
 
+        def _to_aware(dt: Optional[datetime]) -> Optional[datetime]:
+            if dt is None:
+                return None
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                return dt.astimezone()
+            return dt
+
         # Check date bounds if provided
         item_mtime = getattr(item, "modified_at", None)
         if item_mtime is None and getattr(item, "modified_time", 0.0):
@@ -100,12 +108,16 @@ class FilterEngine:
             except Exception:
                 item_mtime = None
 
-        if pred.modified_after is not None:
-            if item_mtime is None or item_mtime < pred.modified_after:
-                return False, ""
-        if pred.modified_before is not None:
-            if item_mtime is None or item_mtime > pred.modified_before:
-                return False, ""
+        if item_mtime is not None:
+            comp_mtime = _to_aware(item_mtime)
+            if pred.modified_after is not None:
+                if comp_mtime < _to_aware(pred.modified_after):
+                    return False, ""
+            if pred.modified_before is not None:
+                if comp_mtime > _to_aware(pred.modified_before):
+                    return False, ""
+        elif pred.modified_after is not None or pred.modified_before is not None:
+            return False, ""
 
         # Check semantic condition if requested
         if pred.needs_semantic_check and pred.semantic_prompt:

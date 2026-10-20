@@ -13,8 +13,6 @@ from folder_organizer.models import ActionType, ClassificationSource, MoveOperat
 from folder_organizer.query.compiler import KeywordFallbackCompiler, QueryCompiler
 from folder_organizer.query.filter import FilterEngine
 
-DirectoryScanner = Scanner
-
 
 class OrganizerGroup(click.Group):
     """Click Group that supports both root command arguments/options and subcommands."""
@@ -255,49 +253,32 @@ def query_command(
         return
 
     if interactive:
-        move_ops = []
+        plan_ops = []
         for op in ops:
-            target = op.target_path or (
-                directory / "Trash" / op.source_path.name
-                if op.action == ActionType.TRASH
-                else op.source_path
-            )
-            category = (
-                op.target_path.parent.name
-                if op.target_path
-                else ("Trash" if op.action == ActionType.TRASH else "Unorganized")
-            )
-            move_ops.append(
+            plan_ops.append(
                 MoveOperation(
                     source_path=op.source_path,
-                    target_category=category,
-                    target_path=target,
-                    intended_path=op.intended_path or target,
-                    source=ClassificationSource.HEURISTIC
-                    if no_llm
-                    else ClassificationSource.LLM,
-                    reason=op.match_reason or f"Query: {prompt}",
-                    collision_detected=op.collision_detected,
-                    collision_action=op.collision_action,
-                    is_selected=op.selected,
+                    target_path=None if op.action == ActionType.TRASH else (op.target_path or (directory / "Organized" / op.source_path.name)),
+                    action=op.action,
+                    match_reason=op.match_reason,
                 )
             )
         executor = SafeExecutor()
-        try:
-            app = OrganizerApp(
-                plan=move_ops,
-                target_dir=directory,
-                executor=executor,
-                no_llm=no_llm,
-            )
-        except TypeError:
-            app = OrganizerApp(plan=move_ops, target_dir=directory, executor=executor)
+        app = OrganizerApp(
+            plan=plan_ops,
+            target_dir=directory,
+            executor=executor,
+            no_llm=no_llm,
+            model=model,
+            active_query=prompt,
+            active_intent=intent,
+        )
         app.run()
         return
 
     console = Console()
     table = Table(
-        title=f"Query Results [DRY RUN] ({len(ops)} match{'es' if len(ops) != 1 else ''})"
+        title=f"Query Results \\[DRY RUN\\] ({len(ops)} match{'es' if len(ops) != 1 else ''})"
         if dry_run
         else f"Query Results ({len(ops)} match{'es' if len(ops) != 1 else ''})"
     )
@@ -351,7 +332,7 @@ def query_command(
 
     # For MOVE or TRASH operations: prompt confirmation unless bypassed with -y/--yes
     if not yes:
-        if not click.confirm(f"Execute {len(ops)} operations", default=False):
+        if not click.confirm(f"Execute {len(ops)} operation{'s' if len(ops) != 1 else ''}", default=False):
             click.echo("Aborted.")
             return
 

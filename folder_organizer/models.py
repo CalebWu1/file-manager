@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 COMPOUND_EXTENSIONS = (".tar.gz", ".tar.bz2", ".tar.xz")
@@ -56,10 +56,17 @@ class MoveOperation(BaseModel):
     intended_path: Optional[Path] = None
     source: ClassificationSource = ClassificationSource.HEURISTIC
     reason: str = ""
+    match_reason: str = ""
     collision_detected: bool = False
     collision_action: CollisionAction = CollisionAction.AUTO_RENAME
     is_selected: bool = True
     action: ActionType = ActionType.MOVE
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.match_reason and not self.reason:
+            self.reason = self.match_reason
+        elif self.reason and not self.match_reason:
+            self.match_reason = self.reason
 
 
 class SessionJournal(BaseModel):

@@ -227,3 +227,87 @@ def test_filter_engine_package_export():
     from folder_organizer.query import FilterEngine as ExportedFilterEngine
     assert ExportedFilterEngine is not None
 
+
+def test_filter_engine_semantic_check_string_booleans(tmp_path):
+    from unittest.mock import MagicMock
+
+    mock_client = MagicMock()
+    mock_client.chat.side_effect = [
+        {"message": {"content": '{"matches": "true"}'}},
+        {"message": {"content": '{"matches": "false"}'}},
+        {"message": {"content": '{"matches": "1"}'}},
+        {"message": {"content": '{"matches": "yes"}'}},
+    ]
+
+    f1 = tmp_path / "f1.txt"
+    f2 = tmp_path / "f2.txt"
+    f3 = tmp_path / "f3.txt"
+    f4 = tmp_path / "f4.txt"
+    items = [
+        ScannedItem(path=f1, filename="f1.txt", extension=".txt", size_bytes=10, content_peek="hello"),
+        ScannedItem(path=f2, filename="f2.txt", extension=".txt", size_bytes=10, content_peek="world"),
+        ScannedItem(path=f3, filename="f3.txt", extension=".txt", size_bytes=10, content_peek="foo"),
+        ScannedItem(path=f4, filename="f4.txt", extension=".txt", size_bytes=10, content_peek="bar"),
+    ]
+
+    intent = QueryIntent(
+        raw_query="find matching items",
+        action=ActionType.FIND,
+        predicates=QueryPredicates(
+            extensions=[".txt"],
+            needs_semantic_check=True,
+            semantic_prompt="check relevance",
+        ),
+    )
+
+    engine = FilterEngine(ollama_client=mock_client)
+    ops = engine.filter_items(items, intent, target_dir=tmp_path)
+    matched_names = [op.source_path.name for op in ops]
+    assert matched_names == ["f1.txt", "f3.txt", "f4.txt"]
+
+
+def test_filter_engine_timezone_aware_date_filtering(tmp_path):
+    from datetime import timezone
+
+    now_utc = datetime.now(timezone.utc)
+    old_time_utc = now_utc - timedelta(days=10)
+    new_time_utc = now_utc - timedelta(days=1)
+
+    f1 = tmp_path / "old.log"
+    f2 = tmp_path / "new.log"
+
+    items_aware = [
+        ScannedItem(path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=old_time_utc),
+        ScannedItem(path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=new_time_utc),
+    ]
+
+    cutoff_aware = now_utc - timedelta(days=5)
+    intent_aware = QueryIntent(
+        raw_query="find recent logs",
+        action=ActionType.FIND,
+        predicates=QueryPredicates(modified_after=cutoff_aware),
+    )
+
+    engine = FilterEngine()
+    ops = engine.filter_items(items_aware, intent_aware, target_dir=tmp_path)
+    assert len(ops) == 1
+    assert ops[0].source_path.name == "new.log"
+
+    cutoff_naive = datetime.now() - timedelta(days=5)
+    intent_naive_pred = QueryIntent(
+        raw_query="find recent logs",
+        action=ActionType.FIND,
+        predicates=QueryPredicates(modified_after=cutoff_naive),
+    )
+    ops2 = engine.filter_items(items_aware, intent_naive_pred, target_dir=tmp_path)
+    assert len(ops2) == 1
+    assert ops2[0].source_path.name == "new.log"
+
+    items_naive = [
+        ScannedItem(path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=datetime.now() - timedelta(days=10)),
+        ScannedItem(path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=datetime.now() - timedelta(days=1)),
+    ]
+    ops3 = engine.filter_items(items_naive, intent_aware, target_dir=tmp_path)
+    assert len(ops3) == 1
+    assert ops3[0].source_path.name == "new.log"
+

@@ -71,7 +71,7 @@ def test_cli_query_move_confirmation_prompt_accepted(tmp_path: Path):
         input="y\n",
     )
     assert result.exit_code == 0
-    assert "Execute 1 operations" in result.output
+    assert "Execute 1 operation" in result.output
     assert (tmp_path / "Software" / "setup.exe").exists()
     assert not (tmp_path / "setup.exe").exists()
 
@@ -86,7 +86,7 @@ def test_cli_query_move_confirmation_prompt_declined(tmp_path: Path):
         input="n\n",
     )
     assert result.exit_code == 0
-    assert "Execute 1 operations" in result.output
+    assert "Execute 1 operation" in result.output
     assert "Aborted" in result.output
     assert (tmp_path / "setup.exe").exists()
     assert not (tmp_path / "Software" / "setup.exe").exists()
@@ -103,7 +103,7 @@ def test_cli_query_trash_with_confirmation_yes(tmp_path: Path):
             input="y\n",
         )
         assert result.exit_code == 0
-        assert "Execute 1 operations" in result.output
+        assert "Execute 1 operation" in result.output
         mock_trash.assert_called_once_with(str(tmp_path / "setup.exe"))
 
 
@@ -118,6 +118,33 @@ def test_cli_query_interactive_flag(tmp_path: Path):
         )
         assert result.exit_code == 0
         mock_run.assert_called_once()
+
+
+def test_cli_query_interactive_passes_action_and_context(tmp_path: Path):
+    (tmp_path / "setup.exe").write_bytes(b"installer")
+
+    runner = CliRunner()
+    captured_kwargs = {}
+
+    def mock_init(self, *args, **kwargs):
+        captured_kwargs.update(kwargs)
+
+    with patch("folder_organizer.cli.OrganizerApp.__init__", mock_init), \
+         patch("folder_organizer.cli.OrganizerApp.run") as mock_run:
+        result = runner.invoke(
+            main,
+            ["query", str(tmp_path), "delete all installers", "--no-llm", "-i"],
+        )
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        assert "plan" in captured_kwargs
+        plan = captured_kwargs["plan"]
+        assert len(plan) == 1
+        assert plan[0].action == ActionType.TRASH
+        assert plan[0].target_path is None
+        assert captured_kwargs.get("active_query") == "delete all installers"
+        assert captured_kwargs.get("active_intent") is not None
+        assert captured_kwargs.get("active_intent").action == ActionType.TRASH
 
 
 def test_cli_query_llm_compiler(tmp_path: Path):

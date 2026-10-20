@@ -10,6 +10,7 @@ from folder_organizer.models import (
     ActionType,
     ScannedItem,
     ClassificationSource,
+    QueryIntent,
 )
 from folder_organizer.executor import SafeExecutor
 from folder_organizer.planner import PlanBuilder
@@ -65,6 +66,8 @@ class OrganizerApp(App):
         model: str = "llama3.2",
         host: str = "http://localhost:11434",
         scanned_items: Optional[List[ScannedItem]] = None,
+        active_query: Optional[str] = None,
+        active_intent: Optional[QueryIntent] = None,
     ):
         super().__init__()
         self.plan = plan
@@ -75,8 +78,8 @@ class OrganizerApp(App):
         self.no_llm = no_llm
         self.model = model
         self.host = host
-        self.active_query: Optional[str] = None
-        self.active_intent = None
+        self.active_query = active_query
+        self.active_intent = active_intent
 
         if scanned_items is not None:
             self.scanned_items = list(scanned_items)
@@ -133,6 +136,20 @@ class OrganizerApp(App):
             self._refresh_table()
             if self.plan:
                 self._update_preview(0)
+            elif self.active_query:
+                try:
+                    box = self.query_one("#preview-box", Static)
+                    box.update("No files match query.")
+                except NoMatches:
+                    pass
+            if self.active_query:
+                try:
+                    banner = self.query_one("#query-banner", Label)
+                    banner.update(
+                        f"Active Query: [bold yellow]{self.active_query}[/bold yellow] ({len(self.plan)} match{'es' if len(self.plan) != 1 else ''}) | [b]Esc[/b] to clear"
+                    )
+                except NoMatches:
+                    pass
         except NoMatches:
             pass
 
@@ -357,7 +374,7 @@ class OrganizerApp(App):
                 new_op = MoveOperation(
                     source_path=act_op.source_path,
                     target_category=intent.destination_folder or ("Trash" if act_op.action == ActionType.TRASH else "Organized"),
-                    target_path=act_op.target_path or act_op.source_path,
+                    target_path=None if act_op.action == ActionType.TRASH else (act_op.target_path or act_op.source_path),
                     intended_path=act_op.intended_path,
                     source=ClassificationSource.HEURISTIC if self.no_llm else ClassificationSource.LLM,
                     reason=act_op.match_reason or intent.reasoning,
@@ -381,6 +398,12 @@ class OrganizerApp(App):
         self._refresh_table()
         if self.plan:
             self._update_preview(0)
+        else:
+            try:
+                box = self.query_one("#preview-box", Static)
+                box.update("No files match query.")
+            except NoMatches:
+                pass
 
     def action_clear_query(self) -> None:
         if self.active_query is not None:
