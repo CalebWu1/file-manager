@@ -1,6 +1,7 @@
 # Local LLM File Organiser
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)](https://www.microsoft.com/windows)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://img.shields.io/badge/tests-164%20passed-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen.svg)]()
