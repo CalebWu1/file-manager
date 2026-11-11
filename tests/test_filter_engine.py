@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
-from pathlib import Path
-from folder_organizer.models import ActionType, QueryIntent, QueryPredicates, ScannedItem
-from folder_organizer.query.filter import FilterEngine
+
+from file_organizer.models import ActionType, QueryIntent, QueryPredicates, ScannedItem
+from file_organizer.query.filter import FilterEngine
 
 
 def test_filter_engine_extension_match(tmp_path):
@@ -106,8 +106,12 @@ def test_filter_engine_date_filtering(tmp_path):
     f2 = tmp_path / "new.log"
 
     items = [
-        ScannedItem(path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=old_time),
-        ScannedItem(path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=new_time),
+        ScannedItem(
+            path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=old_time
+        ),
+        ScannedItem(
+            path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=new_time
+        ),
     ]
 
     cutoff = now - timedelta(days=5)
@@ -177,8 +181,20 @@ def test_filter_engine_semantic_check_matched(tmp_path):
 
     f1 = tmp_path / "receipt1.pdf"
     f2 = tmp_path / "recipe2.pdf"
-    item1 = ScannedItem(path=f1, filename="receipt1.pdf", extension=".pdf", size_bytes=100, content_peek="Total: $45.00 Tax")
-    item2 = ScannedItem(path=f2, filename="recipe2.pdf", extension=".pdf", size_bytes=100, content_peek="2 cups flour, 1 egg")
+    item1 = ScannedItem(
+        path=f1,
+        filename="receipt1.pdf",
+        extension=".pdf",
+        size_bytes=100,
+        content_peek="Total: $45.00 Tax",
+    )
+    item2 = ScannedItem(
+        path=f2,
+        filename="recipe2.pdf",
+        extension=".pdf",
+        size_bytes=100,
+        content_peek="2 cups flour, 1 egg",
+    )
 
     intent = QueryIntent(
         raw_query="find receipts",
@@ -204,7 +220,13 @@ def test_filter_engine_semantic_check_offline_retains_item(tmp_path):
     mock_client.chat.side_effect = ConnectionError("Ollama server offline")
 
     f1 = tmp_path / "doc.pdf"
-    item = ScannedItem(path=f1, filename="doc.pdf", extension=".pdf", size_bytes=100, content_peek="Confidential report")
+    item = ScannedItem(
+        path=f1,
+        filename="doc.pdf",
+        extension=".pdf",
+        size_bytes=100,
+        content_peek="Confidential report",
+    )
 
     intent = QueryIntent(
         raw_query="find reports",
@@ -224,7 +246,8 @@ def test_filter_engine_semantic_check_offline_retains_item(tmp_path):
 
 
 def test_filter_engine_package_export():
-    from folder_organizer.query import FilterEngine as ExportedFilterEngine
+    from file_organizer.query import FilterEngine as ExportedFilterEngine
+
     assert ExportedFilterEngine is not None
 
 
@@ -244,10 +267,18 @@ def test_filter_engine_semantic_check_string_booleans(tmp_path):
     f3 = tmp_path / "f3.txt"
     f4 = tmp_path / "f4.txt"
     items = [
-        ScannedItem(path=f1, filename="f1.txt", extension=".txt", size_bytes=10, content_peek="hello"),
-        ScannedItem(path=f2, filename="f2.txt", extension=".txt", size_bytes=10, content_peek="world"),
-        ScannedItem(path=f3, filename="f3.txt", extension=".txt", size_bytes=10, content_peek="foo"),
-        ScannedItem(path=f4, filename="f4.txt", extension=".txt", size_bytes=10, content_peek="bar"),
+        ScannedItem(
+            path=f1, filename="f1.txt", extension=".txt", size_bytes=10, content_peek="hello"
+        ),
+        ScannedItem(
+            path=f2, filename="f2.txt", extension=".txt", size_bytes=10, content_peek="world"
+        ),
+        ScannedItem(
+            path=f3, filename="f3.txt", extension=".txt", size_bytes=10, content_peek="foo"
+        ),
+        ScannedItem(
+            path=f4, filename="f4.txt", extension=".txt", size_bytes=10, content_peek="bar"
+        ),
     ]
 
     intent = QueryIntent(
@@ -277,8 +308,12 @@ def test_filter_engine_timezone_aware_date_filtering(tmp_path):
     f2 = tmp_path / "new.log"
 
     items_aware = [
-        ScannedItem(path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=old_time_utc),
-        ScannedItem(path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=new_time_utc),
+        ScannedItem(
+            path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=old_time_utc
+        ),
+        ScannedItem(
+            path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=new_time_utc
+        ),
     ]
 
     cutoff_aware = now_utc - timedelta(days=5)
@@ -304,10 +339,21 @@ def test_filter_engine_timezone_aware_date_filtering(tmp_path):
     assert ops2[0].source_path.name == "new.log"
 
     items_naive = [
-        ScannedItem(path=f1, filename="old.log", extension=".log", size_bytes=10, modified_at=datetime.now() - timedelta(days=10)),
-        ScannedItem(path=f2, filename="new.log", extension=".log", size_bytes=10, modified_at=datetime.now() - timedelta(days=1)),
+        ScannedItem(
+            path=f1,
+            filename="old.log",
+            extension=".log",
+            size_bytes=10,
+            modified_at=datetime.now() - timedelta(days=10),
+        ),
+        ScannedItem(
+            path=f2,
+            filename="new.log",
+            extension=".log",
+            size_bytes=10,
+            modified_at=datetime.now() - timedelta(days=1),
+        ),
     ]
     ops3 = engine.filter_items(items_naive, intent_aware, target_dir=tmp_path)
     assert len(ops3) == 1
     assert ops3[0].source_path.name == "new.log"
-

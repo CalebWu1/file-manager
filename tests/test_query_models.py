@@ -1,13 +1,14 @@
 from datetime import datetime
 from pathlib import Path
-from folder_organizer.models import (
-    ActionType,
-    QueryPredicates,
-    QueryIntent,
+
+from file_organizer.models import (
     ActionOperation,
+    ActionType,
     CollisionAction,
-    JournalEntry,
     HistorySession,
+    JournalEntry,
+    QueryIntent,
+    QueryPredicates,
 )
 
 

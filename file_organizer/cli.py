@@ -1,17 +1,18 @@
 from pathlib import Path
-from typing import Optional
+
 import click
 from rich.console import Console
 from rich.table import Table
-from folder_organizer.scanner import Scanner
-from folder_organizer.heuristics import HeuristicEngine
-from folder_organizer.classifier import LLMClassifier
-from folder_organizer.planner import PlanBuilder
-from folder_organizer.executor import SafeExecutor
-from folder_organizer.tui.app import OrganizerApp
-from folder_organizer.models import ActionType, ClassificationSource, MoveOperation
-from folder_organizer.query.compiler import KeywordFallbackCompiler, QueryCompiler
-from folder_organizer.query.filter import FilterEngine
+
+from file_organizer.classifier import LLMClassifier
+from file_organizer.executor import SafeExecutor
+from file_organizer.heuristics import HeuristicEngine
+from file_organizer.models import ActionType, MoveOperation
+from file_organizer.planner import PlanBuilder
+from file_organizer.query.compiler import KeywordFallbackCompiler, QueryCompiler
+from file_organizer.query.filter import FilterEngine
+from file_organizer.scanner import Scanner
+from file_organizer.tui.app import OrganizerApp
 
 
 class OrganizerGroup(click.Group):
@@ -62,12 +63,12 @@ class OrganizerGroup(click.Group):
 @click.pass_context
 def main(
     ctx: click.Context,
-    target_dir: Optional[Path] = None,
+    target_dir: Path | None = None,
     dry_run: bool = False,
     no_llm: bool = False,
     model: str = "llama3.2",
 ):
-    """Local LLM Folder Organizer: Organize local folders with heuristics & Llama 3.2."""
+    """Local LLM File Organiser: Organise local files with heuristics & Llama 3.2."""
     if ctx.invoked_subcommand is not None:
         return
 
@@ -98,9 +99,7 @@ def main(
             ambiguous_items.append(item)
 
     if ambiguous_items and not no_llm:
-        click.echo(
-            f"Classifying {len(ambiguous_items)} contextual files using Ollama ({model})..."
-        )
+        click.echo(f"Classifying {len(ambiguous_items)} contextual files using Ollama ({model})...")
         classifier = LLMClassifier(model=model)
         llm_results = classifier.classify_batch(ambiguous_items)
         classifications.update(llm_results)
@@ -110,8 +109,7 @@ def main(
         )
         classifier = LLMClassifier()
         fallback_results = {
-            item.filename: classifier._fallback_classify(item)
-            for item in ambiguous_items
+            item.filename: classifier._fallback_classify(item) for item in ambiguous_items
         }
         classifications.update(fallback_results)
 
@@ -136,17 +134,14 @@ def main(
 
 @main.command()
 @click.option("--session-id", default=None, help="Specific session ID to undo.")
-def undo(session_id: Optional[str] = None):
+def undo(session_id: str | None = None):
     """Reverts a previous organization run and restores files to their original paths."""
     executor = SafeExecutor()
     restored = executor.undo_session(session_id=session_id)
     if restored > 0:
-        click.echo(
-            f"Successfully restored {restored} files to their original locations."
-        )
+        click.echo(f"Successfully restored {restored} files to their original locations.")
     else:
         click.echo("No files were restored. History is empty or session not found.")
-
 
 
 class QueryCommand(click.Command):
@@ -258,7 +253,9 @@ def query_command(
             plan_ops.append(
                 MoveOperation(
                     source_path=op.source_path,
-                    target_path=None if op.action == ActionType.TRASH else (op.target_path or (directory / "Organized" / op.source_path.name)),
+                    target_path=None
+                    if op.action == ActionType.TRASH
+                    else (op.target_path or (directory / "Organized" / op.source_path.name)),
                     action=op.action,
                     match_reason=op.match_reason,
                 )
@@ -332,14 +329,14 @@ def query_command(
 
     # For MOVE or TRASH operations: prompt confirmation unless bypassed with -y/--yes
     if not yes:
-        if not click.confirm(f"Execute {len(ops)} operation{'s' if len(ops) != 1 else ''}", default=False):
+        if not click.confirm(
+            f"Execute {len(ops)} operation{'s' if len(ops) != 1 else ''}", default=False
+        ):
             click.echo("Aborted.")
             return
 
     executor = SafeExecutor()
-    journal = executor.execute_action_plan(
-        ops, target_dir=directory, query_prompt=prompt
-    )
+    journal = executor.execute_action_plan(ops, target_dir=directory, query_prompt=prompt)
     click.echo(f"Successfully executed {len(journal)} operations.")
 
 

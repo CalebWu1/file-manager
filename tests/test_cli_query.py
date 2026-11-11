@@ -1,9 +1,10 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
+
 from click.testing import CliRunner
-from folder_organizer.cli import main
-from folder_organizer.models import ActionType, QueryIntent, QueryPredicates
+
+from file_organizer.cli import main
+from file_organizer.models import ActionType, QueryIntent, QueryPredicates
 
 
 def test_cli_query_dry_run(tmp_path: Path):
@@ -111,7 +112,7 @@ def test_cli_query_interactive_flag(tmp_path: Path):
     (tmp_path / "setup.exe").write_bytes(b"installer")
 
     runner = CliRunner()
-    with patch("folder_organizer.tui.app.OrganizerApp.run") as mock_run:
+    with patch("file_organizer.tui.app.OrganizerApp.run") as mock_run:
         result = runner.invoke(
             main,
             ["query", str(tmp_path), "find all installers", "--no-llm", "-i"],
@@ -129,8 +130,10 @@ def test_cli_query_interactive_passes_action_and_context(tmp_path: Path):
     def mock_init(self, *args, **kwargs):
         captured_kwargs.update(kwargs)
 
-    with patch("folder_organizer.cli.OrganizerApp.__init__", mock_init), \
-         patch("folder_organizer.cli.OrganizerApp.run") as mock_run:
+    with (
+        patch("file_organizer.cli.OrganizerApp.__init__", mock_init),
+        patch("file_organizer.cli.OrganizerApp.run") as mock_run,
+    ):
         result = runner.invoke(
             main,
             ["query", str(tmp_path), "delete all installers", "--no-llm", "-i"],
@@ -159,7 +162,7 @@ def test_cli_query_llm_compiler(tmp_path: Path):
     )
 
     runner = CliRunner()
-    with patch("folder_organizer.cli.QueryCompiler") as mock_compiler_cls:
+    with patch("file_organizer.cli.QueryCompiler") as mock_compiler_cls:
         mock_instance = MagicMock()
         mock_instance.compile.return_value = fake_intent
         mock_compiler_cls.return_value = mock_instance

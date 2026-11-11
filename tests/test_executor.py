@@ -1,9 +1,8 @@
-from pathlib import Path
-import json
 import logging
-import pytest
-from folder_organizer.models import MoveOperation, ClassificationSource, CollisionAction
-from folder_organizer.executor import SafeExecutor
+from pathlib import Path
+
+from file_organizer.executor import SafeExecutor
+from file_organizer.models import ClassificationSource, CollisionAction, MoveOperation
 
 
 def test_execute_plan_and_undo(tmp_path: Path):
@@ -180,8 +179,18 @@ def test_undo_session_prunes_empty_sessions_in_history(tmp_path: Path):
 
     # Seed history with an empty session followed by another empty session
     seeded_history = [
-        {"session_id": "empty_1", "timestamp": "2026-01-01", "target_dir": str(tmp_path), "operations": []},
-        {"session_id": "empty_2", "timestamp": "2026-01-02", "target_dir": str(tmp_path), "operations": []},
+        {
+            "session_id": "empty_1",
+            "timestamp": "2026-01-01",
+            "target_dir": str(tmp_path),
+            "operations": [],
+        },
+        {
+            "session_id": "empty_2",
+            "timestamp": "2026-01-02",
+            "target_dir": str(tmp_path),
+            "operations": [],
+        },
     ]
     executor._save_history(seeded_history)
 
@@ -196,14 +205,24 @@ def test_undo_session_prunes_empty_sessions_in_history(tmp_path: Path):
     dest.write_text("hello", encoding="utf-8")
 
     seeded_history_2 = [
-        {"session_id": "empty_1", "timestamp": "2026-01-01", "target_dir": str(tmp_path), "operations": []},
+        {
+            "session_id": "empty_1",
+            "timestamp": "2026-01-01",
+            "target_dir": str(tmp_path),
+            "operations": [],
+        },
         {
             "session_id": "real_1",
             "timestamp": "2026-01-02",
             "target_dir": str(tmp_path),
             "operations": [{"from": str(f.resolve()), "to": str(dest.resolve())}],
         },
-        {"session_id": "empty_2", "timestamp": "2026-01-03", "target_dir": str(tmp_path), "operations": []},
+        {
+            "session_id": "empty_2",
+            "timestamp": "2026-01-03",
+            "target_dir": str(tmp_path),
+            "operations": [],
+        },
     ]
     executor._save_history(seeded_history_2)
 
@@ -242,7 +261,7 @@ def test_undo_session_by_id(tmp_path: Path):
         reason="Rule match",
         is_selected=True,
     )
-    sess2 = executor.execute_plan([op2], target_dir=tmp_path)
+    executor.execute_plan([op2], target_dir=tmp_path)
 
     # Undo sess1 explicitly by session_id
     restored = executor.undo_session(session_id=sess1.session_id)
@@ -376,7 +395,7 @@ def test_default_journal_path(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(Path, "home", lambda: fake_home)
 
     executor = SafeExecutor()
-    expected_path = fake_home / ".folder_organizer" / "history.json"
+    expected_path = fake_home / ".file_organizer" / "history.json"
     assert executor.journal_path == expected_path
     assert expected_path.parent.exists()
 
@@ -399,6 +418,7 @@ def test_move_failure_logs_warning(monkeypatch, tmp_path: Path, caplog):
         raise PermissionError("Access denied simulated")
 
     import shutil
+
     monkeypatch.setattr(shutil, "move", mock_move)
 
     journal_path = tmp_path / "history.json"

@@ -1,9 +1,11 @@
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import logging
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
-from folder_organizer.models import ActionOperation, ActionType, CollisionAction
-from folder_organizer.executor import SafeExecutor
+
+from file_organizer.executor import SafeExecutor
+from file_organizer.models import ActionOperation, ActionType, CollisionAction
 
 
 def test_executor_trash_action(tmp_path):
@@ -192,7 +194,10 @@ def test_undo_session_trash_restoration(tmp_path, caplog):
         with caplog.at_level(logging.WARNING):
             restored = executor.undo_session()
             assert restored == 0
-            assert any("Could not automatically restore trashed file" in record.message for record in caplog.records)
+            assert any(
+                "Could not automatically restore trashed file" in record.message
+                for record in caplog.records
+            )
 
     # 2. Test successful restoration
     with patch("send2trash.send2trash"):

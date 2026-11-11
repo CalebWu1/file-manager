@@ -3,18 +3,18 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import ollama
 
-from folder_organizer.models import (
+from file_organizer.models import (
     ActionOperation,
     ActionType,
     CollisionAction,
     QueryIntent,
     ScannedItem,
 )
-from folder_organizer.planner import PlanBuilder
+from file_organizer.planner import PlanBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class FilterEngine:
 
     def __init__(
         self,
-        ollama_client: Optional[Any] = None,
+        ollama_client: Any | None = None,
         model: str = "llama3.2",
         host: str = "http://localhost:11434",
     ):
@@ -93,7 +93,7 @@ class FilterEngine:
         if pred.max_size_bytes is not None and item.size_bytes > pred.max_size_bytes:
             return False, ""
 
-        def _to_aware(dt: Optional[datetime]) -> Optional[datetime]:
+        def _to_aware(dt: datetime | None) -> datetime | None:
             if dt is None:
                 return None
             if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:

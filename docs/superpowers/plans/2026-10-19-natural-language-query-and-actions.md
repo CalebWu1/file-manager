@@ -49,10 +49,12 @@ from folder_organizer.models import (
     HistorySession,
 )
 
+
 def test_action_type_enum():
     assert ActionType.FIND.value == "FIND"
     assert ActionType.MOVE.value == "MOVE"
     assert ActionType.TRASH.value == "TRASH"
+
 
 def test_query_predicates_defaults():
     pred = QueryPredicates()
@@ -62,6 +64,7 @@ def test_query_predicates_defaults():
     assert pred.max_size_bytes is None
     assert pred.needs_semantic_check is False
     assert pred.semantic_prompt is None
+
 
 def test_query_intent_construction():
     intent = QueryIntent(
@@ -74,6 +77,7 @@ def test_query_intent_construction():
     assert intent.destination_folder is None
     assert intent.predicates.extensions == [".exe", ".msi"]
 
+
 def test_action_operation_defaults():
     op = ActionOperation(
         source_path=Path("/tmp/setup.exe"),
@@ -84,6 +88,7 @@ def test_action_operation_defaults():
     assert op.target_path is None
     assert op.collision_action == CollisionAction.AUTO_RENAME
     assert op.selected is True
+
 
 def test_journal_entry_trash_support():
     entry = JournalEntry(
@@ -113,10 +118,12 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 
+
 class ActionType(str, Enum):
     FIND = "FIND"
     MOVE = "MOVE"
     TRASH = "TRASH"
+
 
 class QueryPredicates(BaseModel):
     extensions: list[str] = Field(default_factory=list)
@@ -128,12 +135,14 @@ class QueryPredicates(BaseModel):
     needs_semantic_check: bool = False
     semantic_prompt: Optional[str] = None
 
+
 class QueryIntent(BaseModel):
     raw_query: str
     action: ActionType
     destination_folder: Optional[str] = None
     predicates: QueryPredicates = Field(default_factory=QueryPredicates)
     reasoning: str = ""
+
 
 class ActionOperation(BaseModel):
     source_path: Path
@@ -145,12 +154,14 @@ class ActionOperation(BaseModel):
     selected: bool = True
     match_reason: str = ""
 
+
 # Update JournalEntry to support ActionType
 class JournalEntry(BaseModel):
     action: ActionType = ActionType.MOVE
     source: Path
     destination: Optional[Path] = None
     timestamp: datetime = Field(default_factory=datetime.now)
+
 
 # Update HistorySession to include query_prompt
 class HistorySession(BaseModel):
@@ -195,6 +206,7 @@ git commit -m "feat: add query and action data models and send2trash dependency"
 from folder_organizer.models import ActionType
 from folder_organizer.query.compiler import KeywordFallbackCompiler
 
+
 def test_fallback_compiler_installers_find():
     compiler = KeywordFallbackCompiler()
     intent = compiler.compile("find all installers")
@@ -203,6 +215,7 @@ def test_fallback_compiler_installers_find():
     assert ".msi" in intent.predicates.extensions
     assert intent.destination_folder is None
 
+
 def test_fallback_compiler_move_installers():
     compiler = KeywordFallbackCompiler()
     intent = compiler.compile("move all installers into Installers")
@@ -210,11 +223,13 @@ def test_fallback_compiler_move_installers():
     assert intent.destination_folder == "Installers"
     assert ".exe" in intent.predicates.extensions
 
+
 def test_fallback_compiler_trash_installers():
     compiler = KeywordFallbackCompiler()
     intent = compiler.compile("delete all installers")
     assert intent.action == ActionType.TRASH
     assert ".exe" in intent.predicates.extensions
+
 
 def test_fallback_compiler_size_parsing():
     compiler = KeywordFallbackCompiler()
@@ -222,6 +237,7 @@ def test_fallback_compiler_size_parsing():
     assert intent.action == ActionType.FIND
     assert ".mp4" in intent.predicates.extensions
     assert intent.predicates.min_size_bytes == 500 * 1024 * 1024
+
 
 def test_fallback_compiler_clean_setup():
     compiler = KeywordFallbackCompiler()
@@ -247,6 +263,7 @@ Create `folder_organizer/query/compiler.py`:
 import re
 from typing import Optional
 from folder_organizer.models import ActionType, QueryIntent, QueryPredicates
+
 
 class KeywordFallbackCompiler:
     """Deterministic regex & keyword compiler for offline/fallback queries."""
@@ -368,6 +385,7 @@ git commit -m "feat: implement deterministic keyword and pattern fallback query 
 from unittest.mock import MagicMock, patch
 from folder_organizer.query.compiler import QueryCompiler
 
+
 def test_ollama_query_compiler_success():
     mock_client = MagicMock()
     mock_client.chat.return_value = {
@@ -393,6 +411,7 @@ def test_ollama_query_compiler_success():
     assert intent.action == ActionType.MOVE
     assert intent.destination_folder == "Installers"
     assert intent.predicates.extensions == [".exe", ".msi"]
+
 
 def test_ollama_query_compiler_offline_fallback():
     mock_client = MagicMock()
@@ -422,6 +441,7 @@ from folder_organizer.models import ActionType, QueryIntent, QueryPredicates
 
 logger = logging.getLogger(__name__)
 
+
 class QueryCompiler:
     """Compiles natural language queries using local Ollama (Llama 3.2) with heuristic fallback."""
 
@@ -440,7 +460,12 @@ Analyze the user's natural language request and extract:
 
 Respond ONLY with valid JSON conforming to this schema. No markdown formatting."""
 
-    def __init__(self, model: str = "llama3.2", host: str = "http://localhost:11434", client: Optional[Any] = None):
+    def __init__(
+        self,
+        model: str = "llama3.2",
+        host: str = "http://localhost:11434",
+        client: Optional[Any] = None,
+    ):
         self.model = model
         self.host = host
         self._client = client or ollama.Client(host=host)
@@ -465,7 +490,9 @@ Respond ONLY with valid JSON conforming to this schema. No markdown formatting."
             pred_data = data.get("predicates", {})
 
             predicates = QueryPredicates(
-                extensions=[e if e.startswith(".") else f".{e}" for e in pred_data.get("extensions", [])],
+                extensions=[
+                    e if e.startswith(".") else f".{e}" for e in pred_data.get("extensions", [])
+                ],
                 name_patterns=pred_data.get("name_patterns", []),
                 min_size_bytes=pred_data.get("min_size_bytes"),
                 max_size_bytes=pred_data.get("max_size_bytes"),
@@ -481,7 +508,9 @@ Respond ONLY with valid JSON conforming to this schema. No markdown formatting."
                 reasoning=data.get("reasoning", "Parsed by Llama 3.2"),
             )
         except Exception as exc:
-            logger.warning(f"Ollama query compilation failed ({exc}); falling back to keyword heuristics")
+            logger.warning(
+                f"Ollama query compilation failed ({exc}); falling back to keyword heuristics"
+            )
             return self._fallback.compile(prompt)
 ```
 
@@ -517,6 +546,7 @@ from pathlib import Path
 from folder_organizer.models import ActionType, QueryIntent, QueryPredicates, ScannedItem
 from folder_organizer.query.filter import FilterEngine
 
+
 def test_filter_engine_extension_match(tmp_path):
     f1 = tmp_path / "setup.exe"
     f2 = tmp_path / "document.pdf"
@@ -543,6 +573,7 @@ def test_filter_engine_extension_match(tmp_path):
     assert matched_names == {"setup.exe", "installer.msi"}
     assert all(op.action == ActionType.FIND for op in ops)
 
+
 def test_filter_engine_compound_extension(tmp_path):
     f = tmp_path / "backup.tar.gz"
     f.write_bytes(b"archive")
@@ -558,6 +589,7 @@ def test_filter_engine_compound_extension(tmp_path):
     ops = engine.filter_items([item], intent, target_dir=tmp_path)
     assert len(ops) == 1
     assert ops[0].source_path.name == "backup.tar.gz"
+
 
 def test_filter_engine_size_threshold(tmp_path):
     f1 = tmp_path / "small.mp4"
@@ -595,8 +627,15 @@ import fnmatch
 from pathlib import Path
 from typing import Any, Optional
 import ollama
-from folder_organizer.models import ActionOperation, ActionType, CollisionAction, QueryIntent, ScannedItem
+from folder_organizer.models import (
+    ActionOperation,
+    ActionType,
+    CollisionAction,
+    QueryIntent,
+    ScannedItem,
+)
 from folder_organizer.planner import PlanBuilder
+
 
 class FilterEngine:
     """Evaluates compiled query predicates and semantic checks against directory files."""
@@ -723,6 +762,7 @@ import pytest
 from folder_organizer.models import ActionOperation, ActionType
 from folder_organizer.executor import SafeExecutor
 
+
 def test_executor_trash_action(tmp_path):
     test_file = tmp_path / "setup.exe"
     test_file.write_bytes(b"content")
@@ -742,6 +782,7 @@ def test_executor_trash_action(tmp_path):
     assert journal[0].action == ActionType.TRASH
     assert journal[0].source == test_file
     assert journal[0].destination is None
+
 
 def test_executor_trash_boundary_violation(tmp_path):
     outside_file = tmp_path.parent / "escape.exe"
@@ -813,6 +854,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from folder_organizer.cli import main
 
+
 def test_cli_query_dry_run(tmp_path):
     (tmp_path / "setup.exe").write_bytes(b"installer")
     (tmp_path / "readme.txt").write_bytes(b"text")
@@ -825,6 +867,7 @@ def test_cli_query_dry_run(tmp_path):
     assert result.exit_code == 0
     assert "setup.exe" in result.output
     assert "DRY RUN" in result.output
+
 
 def test_cli_query_no_matches(tmp_path):
     (tmp_path / "readme.txt").write_bytes(b"text")
@@ -848,9 +891,13 @@ Expected: FAIL with `No such command 'query'`
 In `folder_organizer/cli.py`:
 ```python
 @main.command(name="query")
-@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path), default=".")
+@click.argument(
+    "directory", type=click.Path(exists=True, file_okay=False, path_type=Path), default="."
+)
 @click.argument("prompt", type=str)
-@click.option("--dry-run", is_flag=True, help="Preview matches and actions without modifying files.")
+@click.option(
+    "--dry-run", is_flag=True, help="Preview matches and actions without modifying files."
+)
 @click.option("--no-llm", is_flag=True, help="Force heuristic keyword & regex query compiler.")
 @click.option("--model", default="llama3.2", help="Local Ollama model to use.")
 @click.option("-y", "--yes", is_flag=True, help="Bypass execution confirmation prompt.")
@@ -908,9 +955,12 @@ from pathlib import Path
 from folder_organizer.models import MoveOperation, ScannedItem
 from folder_organizer.tui.app import OrganizerApp
 
+
 @pytest.mark.asyncio
 async def test_tui_query_keybinding_opens_modal(tmp_path):
-    item = ScannedItem(path=tmp_path / "setup.exe", filename="setup.exe", extension=".exe", size_bytes=10)
+    item = ScannedItem(
+        path=tmp_path / "setup.exe", filename="setup.exe", extension=".exe", size_bytes=10
+    )
     op = MoveOperation(source_path=item.path, target_path=tmp_path / "Software" / "setup.exe")
     app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
 

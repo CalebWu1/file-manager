@@ -1,10 +1,9 @@
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 import json
-import pytest
+from pathlib import Path
+from unittest.mock import patch
 
-from folder_organizer.models import FileItem, ClassificationSource, ClassificationResult
-from folder_organizer.classifier import LLMClassifier
+from file_organizer.classifier import LLMClassifier
+from file_organizer.models import ClassificationSource, FileItem
 
 
 def test_classify_batch_success():
@@ -94,11 +93,18 @@ def test_classify_batch_partial_response_fallback():
     # LLM only returns classification for aws_bill.pdf
     mock_response = {
         "message": {
-            "content": json.dumps({
-                "classifications": [
-                    {"filename": "aws_bill.pdf", "category": "Documents", "subfolder": "Cloud", "reason": "AWS Invoice"}
-                ]
-            })
+            "content": json.dumps(
+                {
+                    "classifications": [
+                        {
+                            "filename": "aws_bill.pdf",
+                            "category": "Documents",
+                            "subfolder": "Cloud",
+                            "reason": "AWS Invoice",
+                        }
+                    ]
+                }
+            )
         }
     }
 
@@ -125,11 +131,7 @@ def test_classify_batch_malformed_json_triggers_fallback():
         )
     ]
 
-    mock_response = {
-        "message": {
-            "content": "Not valid json at all!"
-        }
-    }
+    mock_response = {"message": {"content": "Not valid json at all!"}}
 
     with patch.object(classifier.client, "chat", return_value=mock_response):
         results = classifier.classify_batch(items)
@@ -170,11 +172,31 @@ def test_classify_batch_peek_truncation():
 
 def test_fallback_classify_categories():
     classifier = LLMClassifier()
-    
-    doc_item = FileItem(path=Path("doc.docx"), filename="doc.docx", extension=".docx", size_bytes=10, modified_time=0.0)
-    code_item = FileItem(path=Path("app.rs"), filename="app.rs", extension=".rs", size_bytes=10, modified_time=0.0)
-    media_item = FileItem(path=Path("song.mp3"), filename="song.mp3", extension=".mp3", size_bytes=10, modified_time=0.0)
-    other_item = FileItem(path=Path("unknown.xyz"), filename="unknown.xyz", extension=".xyz", size_bytes=10, modified_time=0.0)
+
+    doc_item = FileItem(
+        path=Path("doc.docx"),
+        filename="doc.docx",
+        extension=".docx",
+        size_bytes=10,
+        modified_time=0.0,
+    )
+    code_item = FileItem(
+        path=Path("app.rs"), filename="app.rs", extension=".rs", size_bytes=10, modified_time=0.0
+    )
+    media_item = FileItem(
+        path=Path("song.mp3"),
+        filename="song.mp3",
+        extension=".mp3",
+        size_bytes=10,
+        modified_time=0.0,
+    )
+    other_item = FileItem(
+        path=Path("unknown.xyz"),
+        filename="unknown.xyz",
+        extension=".xyz",
+        size_bytes=10,
+        modified_time=0.0,
+    )
 
     assert classifier._fallback_classify(doc_item).category == "Documents"
     assert classifier._fallback_classify(code_item).category == "Code"
@@ -196,11 +218,13 @@ def test_classify_batch_null_subfolder_and_category():
 
     mock_response = {
         "message": {
-            "content": json.dumps({
-                "classifications": [
-                    {"filename": "doc.pdf", "category": None, "subfolder": None, "reason": None}
-                ]
-            })
+            "content": json.dumps(
+                {
+                    "classifications": [
+                        {"filename": "doc.pdf", "category": None, "subfolder": None, "reason": None}
+                    ]
+                }
+            )
         }
     }
 
@@ -225,14 +249,25 @@ def test_classify_batch_filters_hallucinated_filenames_and_non_dicts():
 
     mock_response = {
         "message": {
-            "content": json.dumps({
-                "classifications": [
-                    "invalid non-dict entry",
-                    None,
-                    {"filename": "hallucinated.pdf", "category": "Documents", "reason": "Not in items"},
-                    {"filename": "real.pdf", "category": "Documents", "subfolder": "Work", "reason": "Real doc"},
-                ]
-            })
+            "content": json.dumps(
+                {
+                    "classifications": [
+                        "invalid non-dict entry",
+                        None,
+                        {
+                            "filename": "hallucinated.pdf",
+                            "category": "Documents",
+                            "reason": "Not in items",
+                        },
+                        {
+                            "filename": "real.pdf",
+                            "category": "Documents",
+                            "subfolder": "Work",
+                            "reason": "Real doc",
+                        },
+                    ]
+                }
+            )
         }
     }
 
@@ -256,11 +291,18 @@ def test_classify_batch_handles_non_string_primitives():
     )
     mock_response = {
         "message": {
-            "content": json.dumps({
-                "classifications": [
-                    {"filename": "numbers.pdf", "category": 12345, "subfolder": False, "reason": 999}
-                ]
-            })
+            "content": json.dumps(
+                {
+                    "classifications": [
+                        {
+                            "filename": "numbers.pdf",
+                            "category": 12345,
+                            "subfolder": False,
+                            "reason": 999,
+                        }
+                    ]
+                }
+            )
         }
     }
     with patch.object(classifier.client, "chat", return_value=mock_response):
@@ -288,16 +330,10 @@ def test_classify_batch_chunks_large_inputs():
     def mock_chat(*args, **kwargs):
         nonlocal call_count
         call_count += 1
-        return {
-            "message": {
-                "content": json.dumps({"classifications": []})
-            }
-        }
+        return {"message": {"content": json.dumps({"classifications": []})}}
 
     with patch.object(classifier.client, "chat", side_effect=mock_chat):
         results = classifier.classify_batch(items, chunk_size=10)
         assert len(results) == 25
         # 25 items with chunk_size 10 produces 3 API calls
         assert call_count == 3
-
-

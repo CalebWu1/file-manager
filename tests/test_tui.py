@@ -1,12 +1,14 @@
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
-from folder_organizer.models import MoveOperation, ClassificationSource, CollisionAction
-from folder_organizer.executor import SafeExecutor
-from folder_organizer.tui.app import OrganizerApp
-from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal
+
+import pytest
 from textual.app import App
-from textual.widgets import DataTable, Static, Input, Button
+from textual.widgets import Button, DataTable, Input, Static
+
+from file_organizer.executor import SafeExecutor
+from file_organizer.models import ClassificationSource, CollisionAction, MoveOperation
+from file_organizer.tui.app import OrganizerApp
+from file_organizer.tui.screens import ConfirmExecutionModal, EditDestinationModal
 
 
 def test_tui_app_initialization(tmp_path: Path):
@@ -49,7 +51,7 @@ async def test_tui_app_mount_and_table_display(tmp_path: Path):
     executor = SafeExecutor(journal_path=tmp_path / "history.json")
     app = OrganizerApp(plan=[op1, op2], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         table = app.query_one(DataTable)
         assert table.row_count == 2
         # Check row 0 contents
@@ -85,7 +87,7 @@ async def test_tui_action_toggle_selection(tmp_path: Path):
     executor = SafeExecutor(journal_path=tmp_path / "history.json")
     app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         assert app.plan[0].is_selected is True
         # Toggle off
         app.action_toggle_selection()
@@ -120,7 +122,7 @@ async def test_tui_action_toggle_all(tmp_path: Path):
     executor = SafeExecutor(journal_path=tmp_path / "history.json")
     app = OrganizerApp(plan=[op1, op2], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         # Not all are selected -> action_toggle_all should select all
         app.action_toggle_all()
         assert app.plan[0].is_selected is True
@@ -155,7 +157,7 @@ async def test_tui_action_cycle_collision(tmp_path: Path):
     executor = SafeExecutor(journal_path=tmp_path / "history.json")
     app = OrganizerApp(plan=[op1, op2], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         # On row 0 (op1 with collision)
         assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
         app.action_cycle_collision()
@@ -556,11 +558,10 @@ async def test_tui_target_path_outside_target_dir(tmp_path: Path):
     executor = MagicMock()
     app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         table = app.query_one(DataTable)
         row = table.get_row("0")
         assert str(outside_dir / "test.pdf") == row[2]
-
 
 
 @pytest.mark.asyncio
@@ -628,7 +629,7 @@ async def test_tui_preview_box_shows_content_snippet(tmp_path: Path):
     executor = MagicMock()
     app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         preview = app.query_one("#preview-box", Static)
         rendered = str(preview.render())
         assert "def my_awesome_func():" in rendered
@@ -693,7 +694,7 @@ async def test_tui_cycle_collision_updates_target_path_intended_and_resolved(tmp
     executor = MagicMock()
     app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
 
-    async with app.run_test() as pilot:
+    async with app.run_test():
         # Initially AUTO_RENAME with resolved target path
         assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
         assert app.plan[0].target_path == resolved
@@ -712,4 +713,3 @@ async def test_tui_cycle_collision_updates_target_path_intended_and_resolved(tmp
         app.action_cycle_collision()
         assert app.plan[0].collision_action == CollisionAction.AUTO_RENAME
         assert app.plan[0].target_path == resolved
-

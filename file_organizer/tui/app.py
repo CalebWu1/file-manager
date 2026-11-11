@@ -1,22 +1,23 @@
 from pathlib import Path
-from typing import List, Optional
+
 from textual.app import App, ComposeResult
 from textual.css.query import NoMatches
-from textual.widgets import Header, Footer, DataTable, Static, Label
-from folder_organizer.models import (
-    MoveOperation,
-    CollisionAction,
+from textual.widgets import DataTable, Footer, Header, Label, Static
+
+from file_organizer.executor import SafeExecutor
+from file_organizer.models import (
     ActionOperation,
     ActionType,
-    ScannedItem,
     ClassificationSource,
+    CollisionAction,
+    MoveOperation,
     QueryIntent,
+    ScannedItem,
 )
-from folder_organizer.executor import SafeExecutor
-from folder_organizer.planner import PlanBuilder
-from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal, QueryModal
-from folder_organizer.query import KeywordFallbackCompiler, QueryCompiler, FilterEngine
-from folder_organizer.utils.file_peek import extract_content_peek
+from file_organizer.planner import PlanBuilder
+from file_organizer.query import FilterEngine, KeywordFallbackCompiler, QueryCompiler
+from file_organizer.tui.screens import ConfirmExecutionModal, EditDestinationModal, QueryModal
+from file_organizer.utils.file_peek import extract_content_peek
 
 
 class OrganizerApp(App):
@@ -59,15 +60,15 @@ class OrganizerApp(App):
 
     def __init__(
         self,
-        plan: List[MoveOperation],
+        plan: list[MoveOperation],
         target_dir: Path,
-        executor: Optional[SafeExecutor] = None,
+        executor: SafeExecutor | None = None,
         no_llm: bool = False,
         model: str = "llama3.2",
         host: str = "http://localhost:11434",
-        scanned_items: Optional[List[ScannedItem]] = None,
-        active_query: Optional[str] = None,
-        active_intent: Optional[QueryIntent] = None,
+        scanned_items: list[ScannedItem] | None = None,
+        active_query: str | None = None,
+        active_intent: QueryIntent | None = None,
     ):
         super().__init__()
         self.plan = plan
@@ -132,7 +133,9 @@ class OrganizerApp(App):
         try:
             table = self.query_one(DataTable)
             table.cursor_type = "row"
-            table.add_columns("Include", "File Name", "Destination", "Engine", "Collision", "Reason")
+            table.add_columns(
+                "Include", "File Name", "Destination", "Engine", "Collision", "Reason"
+            )
             self._refresh_table()
             if self.plan:
                 self._update_preview(0)
@@ -187,25 +190,39 @@ class OrganizerApp(App):
                 engine = "[TRASH]"
             elif self.active_query is not None and op_action == ActionType.MOVE:
                 try:
-                    rel_dest = str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                    rel_dest = (
+                        str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                    )
                 except (ValueError, AttributeError):
                     rel_dest = str(op.target_path) if op.target_path else "-"
                 engine = "[MOVE]"
             elif self.active_query is not None and op_action == ActionType.FIND:
                 try:
-                    rel_dest = str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                    rel_dest = (
+                        str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                    )
                 except (ValueError, AttributeError):
                     rel_dest = str(op.target_path) if op.target_path else "-"
                 engine = "[FIND]"
             else:
                 try:
-                    rel_dest = str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                    rel_dest = (
+                        str(op.target_path.relative_to(self.target_dir)) if op.target_path else "-"
+                    )
                 except (ValueError, AttributeError):
                     rel_dest = str(op.target_path) if op.target_path else "-"
                 engine = op.source.value if getattr(op, "source", None) else "unknown"
 
             collision_str = op.collision_action.value if op.collision_detected else "None"
-            table.add_row(include_str, op.source_path.name, rel_dest, engine, collision_str, op.reason, key=str(i))
+            table.add_row(
+                include_str,
+                op.source_path.name,
+                rel_dest,
+                engine,
+                collision_str,
+                op.reason,
+                key=str(i),
+            )
 
         if prev_cursor_row is not None and prev_cursor_row < len(self.plan):
             table.move_cursor(row=prev_cursor_row)
@@ -263,18 +280,29 @@ class OrganizerApp(App):
             return
         if table.cursor_row is not None and 0 <= table.cursor_row < len(self.plan):
             op = self.plan[table.cursor_row]
-            curr_str = f"{op.target_category}/{op.target_subfolder}" if op.target_subfolder else op.target_category
+            curr_str = (
+                f"{op.target_category}/{op.target_subfolder}"
+                if op.target_subfolder
+                else op.target_category
+            )
 
-            def on_edit_done(result: Optional[str]) -> None:
+            def on_edit_done(result: str | None) -> None:
                 if result:
                     parts = [p.strip() for p in result.replace("\\", "/").split("/") if p.strip()]
                     if parts:
                         op.target_category = parts[0]
                         op.target_subfolder = "/".join(parts[1:]) if len(parts) > 1 else None
                         if op.target_subfolder:
-                            intended_path = self.target_dir / op.target_category / op.target_subfolder / op.source_path.name
+                            intended_path = (
+                                self.target_dir
+                                / op.target_category
+                                / op.target_subfolder
+                                / op.source_path.name
+                            )
                         else:
-                            intended_path = self.target_dir / op.target_category / op.source_path.name
+                            intended_path = (
+                                self.target_dir / op.target_category / op.source_path.name
+                            )
 
                         op.intended_path = intended_path
                         op.collision_detected = intended_path.exists()
@@ -296,9 +324,13 @@ class OrganizerApp(App):
             self.notify("No files selected to move!", severity="warning")
             return
 
-        collisions = sum(1 for op in selected if op.collision_detected and op.collision_action == CollisionAction.AUTO_RENAME)
+        collisions = sum(
+            1
+            for op in selected
+            if op.collision_detected and op.collision_action == CollisionAction.AUTO_RENAME
+        )
 
-        def on_confirmed(confirmed: Optional[bool]) -> None:
+        def on_confirmed(confirmed: bool | None) -> None:
             if confirmed:
                 has_trash = any(getattr(op, "action", None) == ActionType.TRASH for op in selected)
                 if has_trash or (self.active_intent is not None) or (self.active_query is not None):
@@ -315,7 +347,9 @@ class OrganizerApp(App):
                         )
                         for op in selected
                     ]
-                    self.executor.execute_action_plan(action_plan, self.target_dir, query_prompt=self.active_query)
+                    self.executor.execute_action_plan(
+                        action_plan, self.target_dir, query_prompt=self.active_query
+                    )
                 else:
                     self.executor.execute_plan(self.plan, self.target_dir)
                 self.executed = True
@@ -324,7 +358,7 @@ class OrganizerApp(App):
         self.push_screen(ConfirmExecutionModal(len(selected), collisions), on_confirmed)
 
     def action_open_query(self) -> None:
-        def on_query_submitted(query_str: Optional[str]) -> None:
+        def on_query_submitted(query_str: str | None) -> None:
             if query_str:
                 self.apply_query(query_str)
 
@@ -344,7 +378,7 @@ class OrganizerApp(App):
 
         action_ops_by_path = {act_op.source_path.resolve(): act_op for act_op in action_ops}
 
-        new_plan: List[MoveOperation] = []
+        new_plan: list[MoveOperation] = []
         for op in self.original_plan:
             src_res = op.source_path.resolve()
             if src_res in action_ops_by_path:
@@ -373,10 +407,15 @@ class OrganizerApp(App):
             if act_op.source_path.resolve() not in original_paths:
                 new_op = MoveOperation(
                     source_path=act_op.source_path,
-                    target_category=intent.destination_folder or ("Trash" if act_op.action == ActionType.TRASH else "Organized"),
-                    target_path=None if act_op.action == ActionType.TRASH else (act_op.target_path or act_op.source_path),
+                    target_category=intent.destination_folder
+                    or ("Trash" if act_op.action == ActionType.TRASH else "Organized"),
+                    target_path=None
+                    if act_op.action == ActionType.TRASH
+                    else (act_op.target_path or act_op.source_path),
                     intended_path=act_op.intended_path,
-                    source=ClassificationSource.HEURISTIC if self.no_llm else ClassificationSource.LLM,
+                    source=ClassificationSource.HEURISTIC
+                    if self.no_llm
+                    else ClassificationSource.LLM,
                     reason=act_op.match_reason or intent.reasoning,
                     collision_detected=act_op.collision_detected,
                     collision_action=act_op.collision_action,

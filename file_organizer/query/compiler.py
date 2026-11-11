@@ -1,11 +1,11 @@
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 import ollama
 
-from folder_organizer.models import ActionType, QueryIntent, QueryPredicates
+from file_organizer.models import ActionType, QueryIntent, QueryPredicates
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class KeywordFallbackCompiler:
 
         # 1. Parse Action & Destination
         action = ActionType.FIND
-        destination_folder: Optional[str] = None
+        destination_folder: str | None = None
 
         if re.search(r"\b(delete|trash|remove|clean\s*up)\b", lower):
             action = ActionType.TRASH
@@ -70,8 +70,8 @@ class KeywordFallbackCompiler:
             name_patterns.append("setup")
 
         # 3. Parse Size Thresholds
-        min_size: Optional[int] = None
-        max_size: Optional[int] = None
+        min_size: int | None = None
+        max_size: int | None = None
 
         min_match = re.search(r"(?:over|larger\s+than|>)\s*(\d+(?:\.\d+)?)\s*(kb|mb|gb|b)", lower)
         if min_match:
@@ -117,7 +117,12 @@ Analyze the user's natural language request and extract:
 
 Respond ONLY with valid JSON conforming to this schema. No markdown formatting."""
 
-    def __init__(self, model: str = "llama3.2", host: str = "http://localhost:11434", client: Optional[Any] = None):
+    def __init__(
+        self,
+        model: str = "llama3.2",
+        host: str = "http://localhost:11434",
+        client: Any | None = None,
+    ):
         self.model = model
         self.host = host
         self._client = client or ollama.Client(host=host)
@@ -142,7 +147,9 @@ Respond ONLY with valid JSON conforming to this schema. No markdown formatting."
             pred_data = data.get("predicates") or {}
 
             predicates = QueryPredicates(
-                extensions=[e if e.startswith(".") else f".{e}" for e in pred_data.get("extensions", [])],
+                extensions=[
+                    e if e.startswith(".") else f".{e}" for e in pred_data.get("extensions", [])
+                ],
                 name_patterns=pred_data.get("name_patterns", []),
                 min_size_bytes=pred_data.get("min_size_bytes"),
                 max_size_bytes=pred_data.get("max_size_bytes"),
@@ -158,5 +165,7 @@ Respond ONLY with valid JSON conforming to this schema. No markdown formatting."
                 reasoning=data.get("reasoning", "Parsed by Llama 3.2"),
             )
         except Exception as exc:
-            logger.warning(f"Ollama query compilation failed ({exc}); falling back to keyword heuristics")
+            logger.warning(
+                f"Ollama query compilation failed ({exc}); falling back to keyword heuristics"
+            )
             return self._fallback.compile(prompt)

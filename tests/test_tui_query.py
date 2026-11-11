@@ -1,14 +1,18 @@
-import pytest
 from pathlib import Path
-from folder_organizer.models import MoveOperation, ScannedItem, ClassificationSource, ActionType
-from folder_organizer.tui.app import OrganizerApp
-from folder_organizer.tui.screens import QueryModal
-from textual.widgets import DataTable, Label, Input, Static
+
+import pytest
+from textual.widgets import DataTable, Input, Label, Static
+
+from file_organizer.models import ActionType, ClassificationSource, MoveOperation, ScannedItem
+from file_organizer.tui.app import OrganizerApp
+from file_organizer.tui.screens import QueryModal
 
 
 @pytest.mark.asyncio
 async def test_tui_query_keybinding_opens_modal(tmp_path: Path):
-    item = ScannedItem(path=tmp_path / "setup.exe", filename="setup.exe", extension=".exe", size_bytes=10)
+    item = ScannedItem(
+        path=tmp_path / "setup.exe", filename="setup.exe", extension=".exe", size_bytes=10
+    )
     op = MoveOperation(source_path=item.path, target_path=tmp_path / "Software" / "setup.exe")
     app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
 
@@ -21,7 +25,9 @@ async def test_tui_query_keybinding_opens_modal(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_tui_query_modal_dismiss_on_escape(tmp_path: Path):
-    item = ScannedItem(path=tmp_path / "setup.exe", filename="setup.exe", extension=".exe", size_bytes=10)
+    item = ScannedItem(
+        path=tmp_path / "setup.exe", filename="setup.exe", extension=".exe", size_bytes=10
+    )
     op = MoveOperation(source_path=item.path, target_path=tmp_path / "Software" / "setup.exe")
     app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
 
@@ -226,7 +232,7 @@ async def test_tui_query_clear_filter_on_escape(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_tui_query_edit_destination_converts_trash_to_move(tmp_path: Path):
-    from folder_organizer.tui.screens import EditDestinationModal
+    from file_organizer.tui.screens import EditDestinationModal
 
     file1 = tmp_path / "installer.msi"
     file1.write_bytes(b"msi content")
@@ -294,11 +300,13 @@ async def test_tui_query_confirm_execute_persists_query_prompt(tmp_path: Path, m
     app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
 
     captured_prompt = []
+
     def mock_execute_action_plan(self, plan, target_dir, query_prompt=None):
         captured_prompt.append(query_prompt)
         return []
 
-    from folder_organizer.executor import SafeExecutor
+    from file_organizer.executor import SafeExecutor
+
     monkeypatch.setattr(SafeExecutor, "execute_action_plan", mock_execute_action_plan)
 
     async with app.run_test() as pilot:
@@ -319,7 +327,7 @@ async def test_tui_query_confirm_execute_persists_query_prompt(tmp_path: Path, m
 
 @pytest.mark.asyncio
 async def test_tui_query_trash_confirm_execute(tmp_path: Path, monkeypatch):
-    from folder_organizer.executor import SafeExecutor
+    from file_organizer.executor import SafeExecutor
 
     file1 = tmp_path / "installer.msi"
     file1.write_bytes(b"installer content")
@@ -342,6 +350,7 @@ async def test_tui_query_trash_confirm_execute(tmp_path: Path, monkeypatch):
         trashed_files.append(path_str)
 
     import send2trash
+
     monkeypatch.setattr(send2trash, "send2trash", mock_send2trash)
 
     async with app.run_test() as pilot:
@@ -361,7 +370,9 @@ async def test_tui_query_trash_confirm_execute(tmp_path: Path, monkeypatch):
 async def test_tui_query_empty_results_clears_preview(tmp_path: Path):
     file1 = tmp_path / "doc.txt"
     file1.write_bytes(b"some content")
-    op = MoveOperation(source_path=file1, target_path=tmp_path / "Docs" / "doc.txt", reason="Text doc")
+    op = MoveOperation(
+        source_path=file1, target_path=tmp_path / "Docs" / "doc.txt", reason="Text doc"
+    )
     app = OrganizerApp(plan=[op], target_dir=tmp_path, no_llm=True)
 
     async with app.run_test() as pilot:

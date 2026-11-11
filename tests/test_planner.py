@@ -1,13 +1,12 @@
 from pathlib import Path
-import pytest
 
-from folder_organizer.models import (
-    FileItem,
+from file_organizer.models import (
     ClassificationResult,
     ClassificationSource,
     CollisionAction,
+    FileItem,
 )
-from folder_organizer.planner import PlanBuilder
+from file_organizer.planner import PlanBuilder
 
 
 def test_build_plan_without_collision(tmp_path: Path):

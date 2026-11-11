@@ -1,9 +1,10 @@
 from pathlib import Path
-from folder_organizer.models import (
-    FileItem,
+
+from file_organizer.models import (
+    ClassificationResult,
     ClassificationSource,
     CollisionAction,
-    ClassificationResult,
+    FileItem,
     MoveOperation,
     SessionJournal,
 )

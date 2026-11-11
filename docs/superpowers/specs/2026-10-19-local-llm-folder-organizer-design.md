@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-19  
 **Status:** Approved  
-**Author:** Pair Programming Agent & Caleb  
+**Author:** Caleb Wu  
 
 ---
 
@@ -28,7 +28,7 @@ folder-organizer
 
 # Launch interactive TUI for a specific folder
 folder-organizer ~/Downloads
-folder-organizer C:\Users\caleb\Downloads
+folder-organizer /path/to/target
 
 # Run in headless dry-run mode (CLI output only)
 folder-organizer ~/Downloads --dry-run
@@ -88,15 +88,18 @@ from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+
 class ClassificationSource(str, Enum):
     HEURISTIC = "heuristic"
     LLM = "llama3.2"
     MANUAL = "manual"
 
+
 class CollisionAction(str, Enum):
     AUTO_RENAME = "auto_rename"
     SKIP = "skip"
     OVERWRITE = "overwrite"
+
 
 class FileItem(BaseModel):
     path: Path
@@ -107,12 +110,14 @@ class FileItem(BaseModel):
     content_peek: Optional[str] = None
     is_active_download: bool = False
 
+
 class ClassificationResult(BaseModel):
     category: str
     subfolder: Optional[str] = None
     confidence: float = 1.0
     source: ClassificationSource
     reason: str
+
 
 class MoveOperation(BaseModel):
     source_path: Path
@@ -124,6 +129,7 @@ class MoveOperation(BaseModel):
     collision_detected: bool = False
     collision_action: CollisionAction = CollisionAction.AUTO_RENAME
     is_selected: bool = True
+
 
 class SessionJournal(BaseModel):
     session_id: str

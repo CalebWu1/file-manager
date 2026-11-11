@@ -1,7 +1,10 @@
 from pathlib import Path
+
 import pytest
-from folder_organizer.scanner import Scanner
-from folder_organizer.utils.file_peek import extract_content_peek
+
+from file_organizer.scanner import Scanner
+from file_organizer.utils.file_peek import extract_content_peek
+
 
 def test_extract_text_peek(tmp_path: Path):
     text_file = tmp_path / "notes.txt"
@@ -10,6 +13,7 @@ def test_extract_text_peek(tmp_path: Path):
     assert peek is not None
     assert "Hello World!" in peek
 
+
 def test_extract_text_peek_max_bytes(tmp_path: Path):
     long_file = tmp_path / "long.md"
     long_file.write_text("A" * 5000, encoding="utf-8")
@@ -17,13 +21,16 @@ def test_extract_text_peek_max_bytes(tmp_path: Path):
     assert peek is not None
     assert len(peek) == 100
 
+
 def test_extract_unsupported_peek(tmp_path: Path):
     bin_file = tmp_path / "app.exe"
     bin_file.write_bytes(b"\x00\x01\x02\x03")
     assert extract_content_peek(bin_file) is None
 
+
 def test_extract_pdf_peek(tmp_path: Path):
     import pypdf
+
     pdf_path = tmp_path / "test.pdf"
     writer = pypdf.PdfWriter()
     writer.add_blank_page(width=72, height=72)
@@ -90,6 +97,7 @@ def test_scanner_dotted_compound_extension(tmp_path: Path):
     assert items[0].filename == "release-v1.0.0.tar.gz"
     assert items[0].extension == ".tar.gz"
 
+
 def test_scanner_invalid_dir(tmp_path: Path):
     scanner = Scanner()
     with pytest.raises(ValueError, match="does not exist or is not a directory"):
@@ -104,4 +112,3 @@ def test_scanner_active_download_uppercase(tmp_path: Path):
     items = scanner.scan_directory(tmp_path)
     filenames = [item.filename for item in items]
     assert filenames == ["real.mp4"]
-

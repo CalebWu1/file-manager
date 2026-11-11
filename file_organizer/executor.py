@@ -6,19 +6,19 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Union, Set
+
 import send2trash
-from folder_organizer.models import (
-    MoveOperation,
-    SessionJournal,
-    CollisionAction,
+
+from file_organizer.models import (
     COMPOUND_EXTENSIONS,
     ActionOperation,
     ActionType,
+    CollisionAction,
     JournalEntry,
-    HistorySession,
+    MoveOperation,
+    SessionJournal,
 )
-from folder_organizer.planner import PlanBuilder
+from file_organizer.planner import PlanBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +26,29 @@ logger = logging.getLogger(__name__)
 class SafeExecutor:
     """Executes file operations safely and maintains an undo history journal."""
 
-    def __init__(self, journal_path: Optional[Union[Path, str]] = None):
+    def __init__(self, journal_path: Path | str | None = None):
         if journal_path:
             self.journal_path = Path(journal_path)
         else:
             home = Path.home()
-            self.journal_path = home / ".folder_organizer" / "history.json"
+            legacy_dir = home / ".folder_organizer"
+            if legacy_dir.exists() and not (home / ".file_organizer").exists():
+                self.journal_path = legacy_dir / "history.json"
+            else:
+                self.journal_path = home / ".file_organizer" / "history.json"
         self.journal_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _load_history(self) -> List[Dict]:
+    def _load_history(self) -> list[dict]:
         if not self.journal_path.exists():
             return []
         try:
-            with open(self.journal_path, "r", encoding="utf-8") as f:
+            with open(self.journal_path, encoding="utf-8") as f:
                 data = json.load(f)
                 return data if isinstance(data, list) else []
         except Exception:
             return []
 
-    def _save_history(self, history: List[Dict]) -> None:
+    def _save_history(self, history: list[dict]) -> None:
         temp_file = self.journal_path.with_suffix(f".tmp.{os.getpid()}")
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
@@ -60,10 +64,10 @@ class SafeExecutor:
 
     def execute_plan(
         self,
-        plan: List[MoveOperation],
-        target_dir: Optional[Union[Path, str]] = None,
+        plan: list[MoveOperation],
+        target_dir: Path | str | None = None,
         *,
-        session_dir: Optional[Union[Path, str]] = None,
+        session_dir: Path | str | None = None,
     ) -> SessionJournal:
         actual_target = target_dir if target_dir is not None else session_dir
         if actual_target is None:
@@ -82,7 +86,7 @@ class SafeExecutor:
             counter += 1
 
         operations_log = []
-        executed_targets: Set[Path] = set()
+        executed_targets: set[Path] = set()
 
         for op in plan:
             if not op.is_selected:
@@ -93,7 +97,11 @@ class SafeExecutor:
 
             dest = op.target_path
             if op.collision_action == CollisionAction.SKIP:
-                if dest.exists() or (op.intended_path and op.intended_path.exists()) or op.collision_detected:
+                if (
+                    dest.exists()
+                    or (op.intended_path and op.intended_path.exists())
+                    or op.collision_detected
+                ):
                     continue
             elif op.collision_action == CollisionAction.AUTO_RENAME:
                 if dest.exists() or dest in executed_targets:
@@ -109,10 +117,12 @@ class SafeExecutor:
             try:
                 shutil.move(str(op.source_path), str(dest))
                 executed_targets.add(dest_resolved)
-                operations_log.append({
-                    "from": str(src_resolved),
-                    "to": str(dest_resolved),
-                })
+                operations_log.append(
+                    {
+                        "from": str(src_resolved),
+                        "to": str(dest_resolved),
+                    }
+                )
             except Exception as e:
                 logger.warning("Failed to move %s to %s: %s", op.source_path, dest, e)
                 continue
@@ -133,10 +143,10 @@ class SafeExecutor:
 
     def execute_action_plan(
         self,
-        plan: List[ActionOperation],
-        target_dir: Union[Path, str],
-        query_prompt: Optional[str] = None,
-    ) -> List[JournalEntry]:
+        plan: list[ActionOperation],
+        target_dir: Path | str,
+        query_prompt: str | None = None,
+    ) -> list[JournalEntry]:
         """Executes ActionOperations (MOVE, TRASH) safely within the target directory boundary."""
         target_dir_path = Path(target_dir)
         target_dir_resolved = target_dir_path.resolve()
@@ -147,7 +157,9 @@ class SafeExecutor:
                 continue
             src_resolved = op.source_path.resolve()
             if src_resolved == target_dir_resolved:
-                raise ValueError(f"Cannot execute action on target directory itself: '{op.source_path}'")
+                raise ValueError(
+                    f"Cannot execute action on target directory itself: '{op.source_path}'"
+                )
             if not src_resolved.is_relative_to(target_dir_resolved):
                 raise ValueError(
                     f"Attempted path traversal: source path '{op.source_path}' is outside target directory '{target_dir}'"
@@ -155,14 +167,16 @@ class SafeExecutor:
             if op.action == ActionType.MOVE and op.target_path is not None:
                 dest_resolved = op.target_path.resolve()
                 if dest_resolved == target_dir_resolved:
-                    raise ValueError(f"Cannot execute action on target directory itself: '{op.target_path}'")
+                    raise ValueError(
+                        f"Cannot execute action on target directory itself: '{op.target_path}'"
+                    )
                 if not dest_resolved.is_relative_to(target_dir_resolved):
                     raise ValueError(
                         f"Attempted path traversal: target path '{op.target_path}' is outside target directory '{target_dir}'"
                     )
 
-        journal_entries: List[JournalEntry] = []
-        executed_targets: Set[Path] = set()
+        journal_entries: list[JournalEntry] = []
+        executed_targets: set[Path] = set()
 
         for op in plan:
             if not op.selected:
@@ -239,7 +253,9 @@ class SafeExecutor:
                     {
                         "action": entry.action.value,
                         "source": str(entry.source.resolve()),
-                        "destination": str(entry.destination.resolve()) if entry.destination else None,
+                        "destination": str(entry.destination.resolve())
+                        if entry.destination
+                        else None,
                         "from": str(entry.source.resolve()),
                         "to": str(entry.destination.resolve()) if entry.destination else None,
                         "timestamp": entry.timestamp.isoformat(),
@@ -284,14 +300,15 @@ class SafeExecutor:
             logger.warning("PowerShell Recycle Bin restoration check failed for %s: %s", orig, e)
             return False
 
-    def undo_session(self, session_id: Optional[str] = None) -> int:
+    def undo_session(self, session_id: str | None = None) -> int:
         raw_history = self._load_history()
         if not raw_history:
             return 0
 
         # Clean up any empty session entries in history
         history = [
-            sess for sess in raw_history
+            sess
+            for sess in raw_history
             if isinstance(sess, dict) and len(sess.get("operations", [])) > 0
         ]
         if not history:
@@ -312,11 +329,13 @@ class SafeExecutor:
         operations = session_data.get("operations", [])
         restored = 0
         created_dirs = set()
-        restored_targets: Set[Path] = set()
+        restored_targets: set[Path] = set()
 
         for op in reversed(operations):
             raw_action = op.get("action") or ActionType.MOVE.value
-            action_str = raw_action.value if hasattr(raw_action, "value") else str(raw_action).upper()
+            action_str = (
+                raw_action.value if hasattr(raw_action, "value") else str(raw_action).upper()
+            )
 
             if action_str == ActionType.TRASH.value:
                 orig_str = op.get("source") or op.get("from")
@@ -324,7 +343,11 @@ class SafeExecutor:
                     continue
                 orig = Path(orig_str)
                 timestamp_str = op.get("timestamp", "unknown time")
-                logger.info("Encountered trashed file in undo session: %s (trashed at %s)", orig_str, timestamp_str)
+                logger.info(
+                    "Encountered trashed file in undo session: %s (trashed at %s)",
+                    orig_str,
+                    timestamp_str,
+                )
 
                 # Attempt restoration via Windows PowerShell COM if on Windows
                 restored_success = False
@@ -354,10 +377,12 @@ class SafeExecutor:
                     dest_orig = orig
                     if dest_orig.exists() or dest_orig in restored_targets:
                         lower_name = orig.name.lower()
-                        comp_ext = next((ext for ext in COMPOUND_EXTENSIONS if lower_name.endswith(ext)), None)
+                        comp_ext = next(
+                            (ext for ext in COMPOUND_EXTENSIONS if lower_name.endswith(ext)), None
+                        )
                         if comp_ext:
-                            stem = orig.name[:-len(comp_ext)]
-                            suffix = orig.name[-len(comp_ext):]
+                            stem = orig.name[: -len(comp_ext)]
+                            suffix = orig.name[-len(comp_ext) :]
                         else:
                             stem = orig.stem
                             suffix = orig.suffix
@@ -387,7 +412,10 @@ class SafeExecutor:
             while cur and cur != cur.parent:
                 if target_dir_resolved:
                     try:
-                        if not cur.resolve().is_relative_to(target_dir_resolved) or cur.resolve() == target_dir_resolved:
+                        if (
+                            not cur.resolve().is_relative_to(target_dir_resolved)
+                            or cur.resolve() == target_dir_resolved
+                        ):
                             break
                     except AttributeError:
                         try:

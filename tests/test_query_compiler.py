@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from folder_organizer.models import ActionType
-from folder_organizer.query.compiler import KeywordFallbackCompiler, QueryCompiler
+from file_organizer.models import ActionType
+from file_organizer.query.compiler import KeywordFallbackCompiler, QueryCompiler
 
 
 def test_fallback_compiler_installers_find():
@@ -105,11 +105,7 @@ def test_ollama_query_compiler_offline_fallback():
 
 def test_ollama_query_compiler_malformed_json_fallback():
     mock_client = MagicMock()
-    mock_client.chat.return_value = {
-        "message": {
-            "content": "Not valid JSON at all"
-        }
-    }
+    mock_client.chat.return_value = {"message": {"content": "Not valid JSON at all"}}
 
     compiler = QueryCompiler(client=mock_client)
     intent = compiler.compile("move all installers to Installers")
@@ -142,7 +138,9 @@ def test_ollama_query_compiler_normalizes_extensions():
 
 
 def test_query_package_exports():
-    from folder_organizer.query import KeywordFallbackCompiler as Kwd, QueryCompiler as Qry
+    from file_organizer.query import KeywordFallbackCompiler as Kwd
+    from file_organizer.query import QueryCompiler as Qry
+
     assert Kwd is not None
     assert Qry is not None
 

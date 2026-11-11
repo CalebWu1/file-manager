@@ -1,22 +1,21 @@
 from pathlib import Path
-from typing import List, Dict, Optional, Set
-from folder_organizer.models import (
-    FileItem,
+
+from file_organizer.models import (
+    COMPOUND_EXTENSIONS,
     ClassificationResult,
     ClassificationSource,
-    MoveOperation,
     CollisionAction,
-    COMPOUND_EXTENSIONS,
+    FileItem,
+    MoveOperation,
 )
 
 
 class PlanBuilder:
     """Computes move operations and resolves target collisions."""
 
-    def resolve_target_path(
-        self, target_path: Path, occupied: Optional[Set[Path]] = None
-    ) -> Path:
+    def resolve_target_path(self, target_path: Path, occupied: set[Path] | None = None) -> Path:
         """If target_path exists on disk or is in occupied set, finds next available 'name (N).ext'."""
+
         def is_taken(p: Path) -> bool:
             return p.exists() or (occupied is not None and p in occupied)
 
@@ -26,8 +25,8 @@ class PlanBuilder:
         lower_name = target_path.name.lower()
         comp_ext = next((ext for ext in COMPOUND_EXTENSIONS if lower_name.endswith(ext)), None)
         if comp_ext:
-            stem = target_path.name[:-len(comp_ext)]
-            suffix = target_path.name[-len(comp_ext):]
+            stem = target_path.name[: -len(comp_ext)]
+            suffix = target_path.name[-len(comp_ext) :]
         else:
             stem = target_path.stem
             suffix = target_path.suffix
@@ -42,12 +41,12 @@ class PlanBuilder:
 
     def build_plan(
         self,
-        base_dir: Optional[Path] = None,
-        items: Optional[List[FileItem]] = None,
-        classifications: Optional[Dict[str, ClassificationResult]] = None,
-        destination_root: Optional[Path] = None,
-        target_dir: Optional[Path] = None,
-    ) -> List[MoveOperation]:
+        base_dir: Path | None = None,
+        items: list[FileItem] | None = None,
+        classifications: dict[str, ClassificationResult] | None = None,
+        destination_root: Path | None = None,
+        target_dir: Path | None = None,
+    ) -> list[MoveOperation]:
         effective_base = base_dir or target_dir
         if effective_base is None:
             raise ValueError("base_dir or target_dir must be provided")
@@ -58,8 +57,8 @@ class PlanBuilder:
             classifications = {}
 
         root = destination_root or effective_base
-        plan: List[MoveOperation] = []
-        planned_targets: Set[Path] = set()
+        plan: list[MoveOperation] = []
+        planned_targets: set[Path] = set()
 
         for item in items:
             res = classifications.get(item.filename)

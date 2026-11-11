@@ -1,7 +1,8 @@
 import json
-from typing import List, Dict, Optional
+
 import ollama
-from folder_organizer.models import FileItem, ClassificationResult, ClassificationSource
+
+from file_organizer.models import ClassificationResult, ClassificationSource, FileItem
 
 
 class LLMClassifier:
@@ -20,17 +21,19 @@ class LLMClassifier:
         except Exception:
             return False
 
-    def classify_batch(self, items: List[FileItem], chunk_size: int = 15) -> Dict[str, ClassificationResult]:
+    def classify_batch(
+        self, items: list[FileItem], chunk_size: int = 15
+    ) -> dict[str, ClassificationResult]:
         if not items:
             return {}
 
-        results: Dict[str, ClassificationResult] = {}
+        results: dict[str, ClassificationResult] = {}
         for i in range(0, len(items), chunk_size):
-            chunk = items[i:i + chunk_size]
+            chunk = items[i : i + chunk_size]
             results.update(self._classify_chunk(chunk))
         return results
 
-    def _classify_chunk(self, items: List[FileItem]) -> Dict[str, ClassificationResult]:
+    def _classify_chunk(self, items: list[FileItem]) -> dict[str, ClassificationResult]:
         file_summaries = []
         for item in items:
             summary = {
@@ -59,7 +62,7 @@ class LLMClassifier:
             raw_content = response.get("message", {}).get("content", "{}")
             data = json.loads(raw_content)
 
-            results: Dict[str, ClassificationResult] = {}
+            results: dict[str, ClassificationResult] = {}
             valid_names = {item.filename for item in items}
             for entry in data.get("classifications", []):
                 if not isinstance(entry, dict):
@@ -75,7 +78,11 @@ class LLMClassifier:
                     subfolder = sub_str if sub_str else None
 
                     reason_raw = entry.get("reason")
-                    reason_str = str(reason_raw).strip() if reason_raw is not None else "Classified by Llama 3.2"
+                    reason_str = (
+                        str(reason_raw).strip()
+                        if reason_raw is not None
+                        else "Classified by Llama 3.2"
+                    )
                     reason = reason_str if reason_str else "Classified by Llama 3.2"
 
                     results[fname] = ClassificationResult(
@@ -96,7 +103,7 @@ class LLMClassifier:
             # Fallback for all items if Ollama call fails
             return {item.filename: self._fallback_classify(item, error=str(e)) for item in items}
 
-    def _fallback_classify(self, item: FileItem, error: Optional[str] = None) -> ClassificationResult:
+    def _fallback_classify(self, item: FileItem, error: str | None = None) -> ClassificationResult:
         ext = item.extension.lower()
         if ext in {".pdf", ".docx", ".doc", ".txt", ".rtf", ".odt"}:
             category = "Documents"

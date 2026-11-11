@@ -43,8 +43,9 @@ from folder_organizer.models import (
     CollisionAction,
     ClassificationResult,
     MoveOperation,
-    SessionJournal
+    SessionJournal,
 )
+
 
 def test_file_item_creation():
     item = FileItem(
@@ -53,11 +54,12 @@ def test_file_item_creation():
         extension=".pdf",
         size_bytes=1024,
         modified_time=1700000000.0,
-        content_peek="Sample invoice contents"
+        content_peek="Sample invoice contents",
     )
     assert item.filename == "sample.pdf"
     assert item.extension == ".pdf"
     assert item.is_active_download is False
+
 
 def test_move_operation_and_collision_defaults():
     move = MoveOperation(
@@ -67,7 +69,7 @@ def test_move_operation_and_collision_defaults():
         target_path=Path("/tmp/Documents/Invoices/sample.pdf"),
         source=ClassificationSource.LLM,
         reason="Detected invoice text",
-        collision_detected=True
+        collision_detected=True,
     )
     assert move.collision_action == CollisionAction.AUTO_RENAME
     assert move.is_selected is True
@@ -116,6 +118,7 @@ include = ["folder_organizer*"]
 ```python
 # folder_organizer/__init__.py
 """Local LLM Folder Organizer."""
+
 __version__ = "0.1.0"
 ```
 
@@ -126,15 +129,18 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
+
 class ClassificationSource(str, Enum):
     HEURISTIC = "heuristic"
     LLM = "llama3.2"
     MANUAL = "manual"
 
+
 class CollisionAction(str, Enum):
     AUTO_RENAME = "auto_rename"
     SKIP = "skip"
     OVERWRITE = "overwrite"
+
 
 class FileItem(BaseModel):
     path: Path
@@ -145,12 +151,14 @@ class FileItem(BaseModel):
     content_peek: Optional[str] = None
     is_active_download: bool = False
 
+
 class ClassificationResult(BaseModel):
     category: str
     subfolder: Optional[str] = None
     confidence: float = 1.0
     source: ClassificationSource
     reason: str
+
 
 class MoveOperation(BaseModel):
     source_path: Path
@@ -162,6 +170,7 @@ class MoveOperation(BaseModel):
     collision_detected: bool = False
     collision_action: CollisionAction = CollisionAction.AUTO_RENAME
     is_selected: bool = True
+
 
 class SessionJournal(BaseModel):
     session_id: str
@@ -202,6 +211,7 @@ from pathlib import Path
 from folder_organizer.models import FileItem, ClassificationSource
 from folder_organizer.heuristics import HeuristicEngine
 
+
 def test_heuristic_installer():
     engine = HeuristicEngine()
     item = FileItem(
@@ -209,12 +219,13 @@ def test_heuristic_installer():
         filename="installer.exe",
         extension=".exe",
         size_bytes=50000,
-        modified_time=0.0
+        modified_time=0.0,
     )
     result = engine.classify(item)
     assert result is not None
     assert result.category == "Installers"
     assert result.source == ClassificationSource.HEURISTIC
+
 
 def test_heuristic_archive():
     engine = HeuristicEngine()
@@ -223,12 +234,13 @@ def test_heuristic_archive():
         filename="backup.tar.gz",
         extension=".tar.gz",
         size_bytes=100000,
-        modified_time=0.0
+        modified_time=0.0,
     )
     result = engine.classify(item)
     assert result is not None
     assert result.category == "Archives"
     assert result.source == ClassificationSource.HEURISTIC
+
 
 def test_heuristic_ambiguous_returns_none():
     engine = HeuristicEngine()
@@ -237,7 +249,7 @@ def test_heuristic_ambiguous_returns_none():
         filename="document.pdf",
         extension=".pdf",
         size_bytes=2048,
-        modified_time=0.0
+        modified_time=0.0,
     )
     assert engine.classify(item) is None
 ```
@@ -253,6 +265,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'folder_organizer.heur
 # folder_organizer/heuristics.py
 from typing import Optional, Dict
 from folder_organizer.models import FileItem, ClassificationResult, ClassificationSource
+
 
 class HeuristicEngine:
     """Fast deterministic rule engine that maps known file extensions to base categories."""
@@ -296,7 +309,7 @@ class HeuristicEngine:
                 subfolder=None,
                 confidence=1.0,
                 source=ClassificationSource.HEURISTIC,
-                reason=f"Matched deterministic extension rule for '{ext}'"
+                reason=f"Matched deterministic extension rule for '{ext}'",
             )
         return None
 ```
@@ -336,12 +349,14 @@ from pathlib import Path
 from folder_organizer.scanner import Scanner
 from folder_organizer.utils.file_peek import extract_content_peek
 
+
 def test_extract_text_peek(tmp_path: Path):
     text_file = tmp_path / "notes.txt"
     text_file.write_text("Hello World! This is a test file for peek.", encoding="utf-8")
     peek = extract_content_peek(text_file)
     assert peek is not None
     assert "Hello World!" in peek
+
 
 def test_scanner_filters_hidden_and_active_downloads(tmp_path: Path):
     (tmp_path / "document.pdf").write_text("dummy pdf", encoding="utf-8")
@@ -376,14 +391,28 @@ Expected: FAIL with `ModuleNotFoundError`
 from pathlib import Path
 from typing import Optional
 
+
 def extract_content_peek(path: Path, max_bytes: int = 2048) -> Optional[str]:
     """Safely extracts a short plain-text snippet from text or PDF files."""
     ext = path.suffix.lower()
 
     # Plain text, code, markdown, csv, json
     text_extensions = {
-        ".txt", ".md", ".csv", ".json", ".py", ".sh", ".html", ".css",
-        ".yaml", ".yml", ".xml", ".ini", ".conf", ".sql", ".log"
+        ".txt",
+        ".md",
+        ".csv",
+        ".json",
+        ".py",
+        ".sh",
+        ".html",
+        ".css",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".ini",
+        ".conf",
+        ".sql",
+        ".log",
     }
 
     if ext in text_extensions:
@@ -397,6 +426,7 @@ def extract_content_peek(path: Path, max_bytes: int = 2048) -> Optional[str]:
     if ext == ".pdf":
         try:
             import pypdf
+
             reader = pypdf.PdfReader(str(path))
             if reader.pages:
                 text = reader.pages[0].extract_text() or ""
@@ -415,16 +445,13 @@ from typing import List, Set
 from folder_organizer.models import FileItem
 from folder_organizer.utils.file_peek import extract_content_peek
 
+
 class Scanner:
     """Scans target directory for unorganized files while filtering incomplete/system files."""
 
-    IGNORED_EXTENSIONS: Set[str] = {
-        ".crdownload", ".part", ".download", ".tmp"
-    }
+    IGNORED_EXTENSIONS: Set[str] = {".crdownload", ".part", ".download", ".tmp"}
 
-    IGNORED_NAMES: Set[str] = {
-        "desktop.ini", "thumbs.db", ".ds_store"
-    }
+    IGNORED_NAMES: Set[str] = {"desktop.ini", "thumbs.db", ".ds_store"}
 
     def scan_directory(self, target_dir: Path) -> List[FileItem]:
         if not target_dir.exists() or not target_dir.is_dir():
@@ -449,10 +476,14 @@ class Scanner:
 
             # Detect compound extension like .tar.gz if present
             suffixes = "".join(entry.suffixes).lower()
-            ext = suffixes if suffixes in {".tar.gz", ".tar.bz2", ".tar.xz"} else entry.suffix.lower()
+            ext = (
+                suffixes if suffixes in {".tar.gz", ".tar.bz2", ".tar.xz"} else entry.suffix.lower()
+            )
 
             # Skip active downloads
-            if ext in self.IGNORED_EXTENSIONS or any(name.endswith(e) for e in self.IGNORED_EXTENSIONS):
+            if ext in self.IGNORED_EXTENSIONS or any(
+                name.endswith(e) for e in self.IGNORED_EXTENSIONS
+            ):
                 continue
 
             try:
@@ -464,14 +495,16 @@ class Scanner:
 
             content_peek = extract_content_peek(entry)
 
-            items.append(FileItem(
-                path=entry,
-                filename=name,
-                extension=ext,
-                size_bytes=size_bytes,
-                modified_time=mtime,
-                content_peek=content_peek
-            ))
+            items.append(
+                FileItem(
+                    path=entry,
+                    filename=name,
+                    extension=ext,
+                    size_bytes=size_bytes,
+                    modified_time=mtime,
+                    content_peek=content_peek,
+                )
+            )
 
         return items
 ```
@@ -509,6 +542,7 @@ from unittest.mock import MagicMock, patch
 from folder_organizer.models import FileItem, ClassificationSource
 from folder_organizer.classifier import LLMClassifier
 
+
 def test_classify_batch_success():
     classifier = LLMClassifier(model="llama3.2")
     items = [
@@ -518,7 +552,7 @@ def test_classify_batch_success():
             extension=".pdf",
             size_bytes=2048,
             modified_time=0.0,
-            content_peek="Amazon Web Services Invoice #1234"
+            content_peek="Amazon Web Services Invoice #1234",
         )
     ]
 
@@ -536,6 +570,7 @@ def test_classify_batch_success():
         assert res.subfolder == "AWS"
         assert res.source == ClassificationSource.LLM
 
+
 def test_classify_batch_fallback_on_error():
     classifier = LLMClassifier(model="llama3.2")
     items = [
@@ -544,7 +579,7 @@ def test_classify_batch_fallback_on_error():
             filename="notes.txt",
             extension=".txt",
             size_bytes=500,
-            modified_time=0.0
+            modified_time=0.0,
         )
     ]
 
@@ -568,6 +603,7 @@ import json
 from typing import List, Dict, Optional
 import ollama
 from folder_organizer.models import FileItem, ClassificationResult, ClassificationSource
+
 
 class LLMClassifier:
     """Interacts with local Ollama Llama 3.2 to classify files using structured JSON outputs."""
@@ -595,7 +631,7 @@ class LLMClassifier:
                 "filename": item.filename,
                 "extension": item.extension,
                 "size_bytes": item.size_bytes,
-                "peek": item.content_peek[:400] if item.content_peek else ""
+                "peek": item.content_peek[:400] if item.content_peek else "",
             }
             file_summaries.append(summary)
 
@@ -610,9 +646,7 @@ class LLMClassifier:
 
         try:
             response = self.client.chat(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                format="json"
+                model=self.model, messages=[{"role": "user", "content": prompt}], format="json"
             )
             raw_content = response.get("message", {}).get("content", "{}")
             data = json.loads(raw_content)
@@ -626,7 +660,7 @@ class LLMClassifier:
                         subfolder=entry.get("subfolder", "").strip() or None,
                         confidence=0.9,
                         source=ClassificationSource.LLM,
-                        reason=entry.get("reason", "Classified by Llama 3.2")
+                        reason=entry.get("reason", "Classified by Llama 3.2"),
                     )
 
             # Ensure all items received a result
@@ -639,7 +673,9 @@ class LLMClassifier:
             # Fallback for all items if Ollama call fails
             return {item.filename: self._fallback_classify(item, error=str(e)) for item in items}
 
-    def _fallback_classify(self, item: FileItem, error: Optional[str] = None) -> ClassificationResult:
+    def _fallback_classify(
+        self, item: FileItem, error: Optional[str] = None
+    ) -> ClassificationResult:
         ext = item.extension.lower()
         if ext in {".pdf", ".docx", ".doc", ".txt", ".rtf", ".odt"}:
             category = "Documents"
@@ -656,7 +692,7 @@ class LLMClassifier:
             subfolder=None,
             confidence=0.5,
             source=ClassificationSource.HEURISTIC,
-            reason=reason
+            reason=reason,
         )
 ```
 
@@ -690,8 +726,14 @@ git commit -m "feat: implement local Ollama classifier with structured JSON outp
 ```python
 # tests/test_planner.py
 from pathlib import Path
-from folder_organizer.models import FileItem, ClassificationResult, ClassificationSource, CollisionAction
+from folder_organizer.models import (
+    FileItem,
+    ClassificationResult,
+    ClassificationSource,
+    CollisionAction,
+)
 from folder_organizer.planner import PlanBuilder
+
 
 def test_build_plan_without_collision(tmp_path: Path):
     item = FileItem(
@@ -699,14 +741,14 @@ def test_build_plan_without_collision(tmp_path: Path):
         filename="report.pdf",
         extension=".pdf",
         size_bytes=1000,
-        modified_time=0.0
+        modified_time=0.0,
     )
     classifications = {
         "report.pdf": ClassificationResult(
             category="Documents",
             subfolder="Reports",
             source=ClassificationSource.LLM,
-            reason="Work report"
+            reason="Work report",
         )
     }
 
@@ -717,6 +759,7 @@ def test_build_plan_without_collision(tmp_path: Path):
     op = plan[0]
     assert op.target_path == tmp_path / "Documents" / "Reports" / "report.pdf"
     assert op.collision_detected is False
+
 
 def test_build_plan_with_collision_auto_renames(tmp_path: Path):
     dest_dir = tmp_path / "Documents"
@@ -729,14 +772,14 @@ def test_build_plan_with_collision_auto_renames(tmp_path: Path):
         filename="report.pdf",
         extension=".pdf",
         size_bytes=1000,
-        modified_time=0.0
+        modified_time=0.0,
     )
     classifications = {
         "report.pdf": ClassificationResult(
             category="Documents",
             subfolder=None,
             source=ClassificationSource.HEURISTIC,
-            reason="Document rule"
+            reason="Document rule",
         )
     }
 
@@ -760,12 +803,8 @@ Expected: FAIL with `ModuleNotFoundError`
 # folder_organizer/planner.py
 from pathlib import Path
 from typing import List, Dict, Optional
-from folder_organizer.models import (
-    FileItem,
-    ClassificationResult,
-    MoveOperation,
-    CollisionAction
-)
+from folder_organizer.models import FileItem, ClassificationResult, MoveOperation, CollisionAction
+
 
 class PlanBuilder:
     """Computes move operations and resolves target collisions."""
@@ -791,7 +830,7 @@ class PlanBuilder:
         base_dir: Path,
         items: List[FileItem],
         classifications: Dict[str, ClassificationResult],
-        destination_root: Optional[Path] = None
+        destination_root: Optional[Path] = None,
     ) -> List[MoveOperation]:
         root = destination_root or base_dir
         plan: List[MoveOperation] = []
@@ -816,17 +855,21 @@ class PlanBuilder:
             else:
                 final_path = intended_path
 
-            plan.append(MoveOperation(
-                source_path=item.path,
-                target_category=category,
-                target_subfolder=subfolder,
-                target_path=final_path,
-                source=source,
-                reason=reason,
-                collision_detected=collision_detected,
-                collision_action=CollisionAction.AUTO_RENAME if collision_detected else CollisionAction.SKIP,
-                is_selected=True
-            ))
+            plan.append(
+                MoveOperation(
+                    source_path=item.path,
+                    target_category=category,
+                    target_subfolder=subfolder,
+                    target_path=final_path,
+                    source=source,
+                    reason=reason,
+                    collision_detected=collision_detected,
+                    collision_action=CollisionAction.AUTO_RENAME
+                    if collision_detected
+                    else CollisionAction.SKIP,
+                    is_selected=True,
+                )
+            )
 
         return plan
 ```
@@ -864,6 +907,7 @@ from pathlib import Path
 from folder_organizer.models import MoveOperation, ClassificationSource, CollisionAction
 from folder_organizer.executor import SafeExecutor
 
+
 def test_execute_plan_and_undo(tmp_path: Path):
     source_file = tmp_path / "sample.txt"
     source_file.write_text("content", encoding="utf-8")
@@ -875,7 +919,7 @@ def test_execute_plan_and_undo(tmp_path: Path):
         target_path=dest_path,
         source=ClassificationSource.HEURISTIC,
         reason="Rule match",
-        is_selected=True
+        is_selected=True,
     )
 
     journal_path = tmp_path / "history.json"
@@ -910,6 +954,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict
 from folder_organizer.models import MoveOperation, SessionJournal, CollisionAction
+
 
 class SafeExecutor:
     """Executes file operations safely and maintains an undo history journal."""
@@ -954,10 +999,9 @@ class SafeExecutor:
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
                 shutil.move(str(op.source_path), str(dest))
-                operations_log.append({
-                    "from": str(op.source_path.resolve()),
-                    "to": str(dest.resolve())
-                })
+                operations_log.append(
+                    {"from": str(op.source_path.resolve()), "to": str(dest.resolve())}
+                )
             except Exception as e:
                 # Log error and continue with remaining batch
                 continue
@@ -966,7 +1010,7 @@ class SafeExecutor:
             session_id=session_id,
             timestamp=timestamp,
             target_dir=str(target_dir.resolve()),
-            operations=operations_log
+            operations=operations_log,
         )
 
         history = self._load_history()
@@ -1060,6 +1104,7 @@ from folder_organizer.models import MoveOperation, ClassificationSource
 from folder_organizer.executor import SafeExecutor
 from folder_organizer.tui.app import OrganizerApp
 
+
 def test_tui_app_initialization(tmp_path: Path):
     op = MoveOperation(
         source_path=tmp_path / "test.pdf",
@@ -1067,7 +1112,7 @@ def test_tui_app_initialization(tmp_path: Path):
         target_path=tmp_path / "Documents" / "test.pdf",
         source=ClassificationSource.HEURISTIC,
         reason="Rule match",
-        is_selected=True
+        is_selected=True,
     )
     executor = SafeExecutor(journal_path=tmp_path / "history.json")
     app = OrganizerApp(plan=[op], target_dir=tmp_path, executor=executor)
@@ -1095,6 +1140,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Label, Button, Input
 from textual.containers import Vertical, Horizontal
 
+
 class EditDestinationModal(ModalScreen[str]):
     """Modal dialog allowing the user to override destination category or subfolder."""
 
@@ -1118,6 +1164,7 @@ class EditDestinationModal(ModalScreen[str]):
         else:
             self.dismiss(None)
 
+
 class ConfirmExecutionModal(ModalScreen[bool]):
     """Confirmation modal prior to moving files."""
 
@@ -1130,7 +1177,9 @@ class ConfirmExecutionModal(ModalScreen[bool]):
         with Vertical(id="confirm-dialog"):
             yield Label(f"[b]Ready to organize {self.move_count} files?[/b]")
             if self.collision_count > 0:
-                yield Label(f"[yellow]Warning: {self.collision_count} name collisions will be auto-renamed.[/yellow]")
+                yield Label(
+                    f"[yellow]Warning: {self.collision_count} name collisions will be auto-renamed.[/yellow]"
+                )
             yield Label("This action can be undone anytime via 'folder-organizer undo'.")
             with Horizontal():
                 yield Button("Execute", variant="success", id="confirm-btn")
@@ -1150,6 +1199,7 @@ from textual.containers import Vertical, Horizontal
 from folder_organizer.models import MoveOperation, CollisionAction
 from folder_organizer.executor import SafeExecutor
 from folder_organizer.tui.screens import EditDestinationModal, ConfirmExecutionModal
+
 
 class OrganizerApp(App):
     """Full-screen interactive review dashboard."""
@@ -1191,7 +1241,9 @@ class OrganizerApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Label(f"Target: [b]{self.target_dir}[/b] | Press [b]Space[/b] to toggle, [b]e[/b] to edit, [b]x[/b] to execute")
+        yield Label(
+            f"Target: [b]{self.target_dir}[/b] | Press [b]Space[/b] to toggle, [b]e[/b] to edit, [b]x[/b] to execute"
+        )
         yield DataTable(id="table")
         yield Static("Select a row to preview file contents.", id="preview-box")
         yield Footer()
@@ -1207,10 +1259,22 @@ class OrganizerApp(App):
         table.clear()
         for i, op in enumerate(self.plan):
             include_str = "[X]" if op.is_selected else "[ ]"
-            rel_dest = str(op.target_path.relative_to(self.target_dir)) if self.target_dir in op.target_path.parents else str(op.target_path)
+            rel_dest = (
+                str(op.target_path.relative_to(self.target_dir))
+                if self.target_dir in op.target_path.parents
+                else str(op.target_path)
+            )
             engine = op.source.value if op.source else "unknown"
             collision_str = op.collision_action.value if op.collision_detected else "None"
-            table.add_row(include_str, op.source_path.name, rel_dest, engine, collision_str, op.reason, key=str(i))
+            table.add_row(
+                include_str,
+                op.source_path.name,
+                rel_dest,
+                engine,
+                collision_str,
+                op.reason,
+                key=str(i),
+            )
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         row_key = event.row_key.value
@@ -1219,7 +1283,9 @@ class OrganizerApp(App):
             if 0 <= idx < len(self.plan):
                 op = self.plan[idx]
                 box = self.query_one("#preview-box", Static)
-                box.update(f"[b]Source:[/b] {op.source_path}\n[b]Target:[/b] {op.target_path}\n[b]Reason:[/b] {op.reason}")
+                box.update(
+                    f"[b]Source:[/b] {op.source_path}\n[b]Target:[/b] {op.target_path}\n[b]Reason:[/b] {op.reason}"
+                )
 
     def action_toggle_selection(self) -> None:
         table = self.query_one(DataTable)
@@ -1242,7 +1308,7 @@ class OrganizerApp(App):
                 cycle = {
                     CollisionAction.AUTO_RENAME: CollisionAction.SKIP,
                     CollisionAction.SKIP: CollisionAction.OVERWRITE,
-                    CollisionAction.OVERWRITE: CollisionAction.AUTO_RENAME
+                    CollisionAction.OVERWRITE: CollisionAction.AUTO_RENAME,
                 }
                 op.collision_action = cycle[op.collision_action]
                 self._refresh_table()
@@ -1251,7 +1317,11 @@ class OrganizerApp(App):
         table = self.query_one(DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self.plan):
             op = self.plan[table.cursor_row]
-            curr_str = f"{op.target_category}/{op.target_subfolder}" if op.target_subfolder else op.target_category
+            curr_str = (
+                f"{op.target_category}/{op.target_subfolder}"
+                if op.target_subfolder
+                else op.target_category
+            )
 
             def on_edit_done(result: Optional[str]) -> None:
                 if result:
@@ -1259,7 +1329,12 @@ class OrganizerApp(App):
                     op.target_category = parts[0]
                     op.target_subfolder = "/".join(parts[1:]) if len(parts) > 1 else None
                     if op.target_subfolder:
-                        op.target_path = self.target_dir / op.target_category / op.target_subfolder / op.source_path.name
+                        op.target_path = (
+                            self.target_dir
+                            / op.target_category
+                            / op.target_subfolder
+                            / op.source_path.name
+                        )
                     else:
                         op.target_path = self.target_dir / op.target_category / op.source_path.name
                     self._refresh_table()
@@ -1272,7 +1347,11 @@ class OrganizerApp(App):
             self.notify("No files selected to move!", severity="warning")
             return
 
-        collisions = sum(1 for op in selected if op.collision_detected and op.collision_action == CollisionAction.AUTO_RENAME)
+        collisions = sum(
+            1
+            for op in selected
+            if op.collision_detected and op.collision_action == CollisionAction.AUTO_RENAME
+        )
 
         def on_confirmed(confirmed: bool) -> None:
             if confirmed:
@@ -1315,6 +1394,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from folder_organizer.cli import main
 
+
 def test_cli_dry_run(tmp_path: Path):
     (tmp_path / "app.exe").write_text("dummy", encoding="utf-8")
     runner = CliRunner()
@@ -1323,6 +1403,7 @@ def test_cli_dry_run(tmp_path: Path):
     assert "Dry-Run Plan" in result.output
     assert "app.exe" in result.output
     assert "Installers" in result.output
+
 
 def test_cli_undo_empty(tmp_path: Path):
     runner = CliRunner()
@@ -1349,10 +1430,23 @@ from folder_organizer.planner import PlanBuilder
 from folder_organizer.executor import SafeExecutor
 from folder_organizer.tui.app import OrganizerApp
 
+
 @click.group(invoke_without_command=True)
-@click.argument("target_dir", required=False, type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path))
-@click.option("--dry-run", is_flag=True, help="Print proposed plan to stdout without opening TUI or moving files.")
-@click.option("--no-llm", is_flag=True, help="Rely strictly on deterministic heuristic rules without calling Ollama.")
+@click.argument(
+    "target_dir",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Print proposed plan to stdout without opening TUI or moving files.",
+)
+@click.option(
+    "--no-llm",
+    is_flag=True,
+    help="Rely strictly on deterministic heuristic rules without calling Ollama.",
+)
 @click.option("--model", default="llama3.2", help="Ollama model name (default: llama3.2).")
 @click.pass_context
 def main(ctx, target_dir: Path, dry_run: bool, no_llm: bool, model: str):
@@ -1392,9 +1486,13 @@ def main(ctx, target_dir: Path, dry_run: bool, no_llm: bool, model: str):
         llm_results = classifier.classify_batch(ambiguous_items)
         classifications.update(llm_results)
     elif ambiguous_items:
-        click.echo(f"Assigning {len(ambiguous_items)} files to fallback categories (LLM disabled)...")
+        click.echo(
+            f"Assigning {len(ambiguous_items)} files to fallback categories (LLM disabled)..."
+        )
         classifier = LLMClassifier()
-        fallback_results = {item.filename: classifier._fallback_classify(item) for item in ambiguous_items}
+        fallback_results = {
+            item.filename: classifier._fallback_classify(item) for item in ambiguous_items
+        }
         classifications.update(fallback_results)
 
     planner = PlanBuilder()
@@ -1405,11 +1503,14 @@ def main(ctx, target_dir: Path, dry_run: bool, no_llm: bool, model: str):
         click.echo("\n--- Dry-Run Plan ---")
         for op in plan:
             collision = f" [Collision -> auto-rename]" if op.collision_detected else ""
-            click.echo(f"• {op.source_path.name} -> {op.target_path.relative_to(target_dir)}{collision}")
+            click.echo(
+                f"• {op.source_path.name} -> {op.target_path.relative_to(target_dir)}{collision}"
+            )
         return
 
     app = OrganizerApp(plan=plan, target_dir=target_dir, executor=executor)
     app.run()
+
 
 @main.command()
 @click.option("--session-id", default=None, help="Specific session ID to undo.")
@@ -1421,6 +1522,7 @@ def undo(session_id: str):
         click.echo(f"Successfully restored {restored} files to their original locations.")
     else:
         click.echo("No files were restored. History is empty or session not found.")
+
 
 if __name__ == "__main__":
     main()

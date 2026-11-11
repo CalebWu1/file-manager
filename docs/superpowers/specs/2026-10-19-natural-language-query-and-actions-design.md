@@ -60,10 +60,12 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 
+
 class ActionType(str, Enum):
-    FIND = "FIND"        # Pure search / display matches
-    MOVE = "MOVE"        # Move matches to target directory
-    TRASH = "TRASH"      # Safely send matches to system Recycle Bin
+    FIND = "FIND"  # Pure search / display matches
+    MOVE = "MOVE"  # Move matches to target directory
+    TRASH = "TRASH"  # Safely send matches to system Recycle Bin
+
 
 class QueryPredicates(BaseModel):
     extensions: list[str] = Field(default_factory=list)
@@ -75,12 +77,14 @@ class QueryPredicates(BaseModel):
     needs_semantic_check: bool = False
     semantic_prompt: Optional[str] = None
 
+
 class QueryIntent(BaseModel):
     raw_query: str
     action: ActionType
     destination_folder: Optional[str] = None
     predicates: QueryPredicates = Field(default_factory=QueryPredicates)
     reasoning: str = ""
+
 
 class ActionOperation(BaseModel):
     source_path: Path
@@ -92,11 +96,13 @@ class ActionOperation(BaseModel):
     selected: bool = True
     match_reason: str = ""
 
+
 class JournalEntry(BaseModel):
     action: ActionType = ActionType.MOVE
     source: Path
     destination: Optional[Path] = None
     timestamp: datetime = Field(default_factory=datetime.now)
+
 
 class HistorySession(BaseModel):
     session_id: str

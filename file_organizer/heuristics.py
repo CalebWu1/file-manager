@@ -1,10 +1,10 @@
-from typing import Optional, Dict
-from folder_organizer.models import FileItem, ClassificationResult, ClassificationSource
+from file_organizer.models import ClassificationResult, ClassificationSource, FileItem
+
 
 class HeuristicEngine:
     """Fast deterministic rule engine that maps known file extensions to base categories."""
 
-    EXTENSION_MAP: Dict[str, str] = {
+    EXTENSION_MAP: dict[str, str] = {
         # Installers / Packages
         ".exe": "Installers",
         ".msi": "Installers",
@@ -34,7 +34,7 @@ class HeuristicEngine:
         ".woff2": "Fonts",
     }
 
-    def classify(self, item: FileItem) -> Optional[ClassificationResult]:
+    def classify(self, item: FileItem) -> ClassificationResult | None:
         ext = item.extension.lower()
         if ext and not ext.startswith("."):
             ext = f".{ext}"
@@ -45,6 +45,6 @@ class HeuristicEngine:
                 subfolder=None,
                 confidence=1.0,
                 source=ClassificationSource.HEURISTIC,
-                reason=f"Matched deterministic extension rule for '{ext}'"
+                reason=f"Matched deterministic extension rule for '{ext}'",
             )
         return None

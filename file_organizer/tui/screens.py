@@ -1,11 +1,10 @@
-from typing import Optional
 from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Label, Button, Input
-from textual.containers import Vertical, Horizontal
+from textual.widgets import Button, Input, Label
 
 
-class EditDestinationModal(ModalScreen[Optional[str]]):
+class EditDestinationModal(ModalScreen[str | None]):
     """Modal dialog allowing the user to override destination category or subfolder."""
 
     BINDINGS = [
@@ -56,7 +55,9 @@ class ConfirmExecutionModal(ModalScreen[bool]):
         with Vertical(id="confirm-dialog"):
             yield Label(f"[b]Ready to organize {self.move_count} files?[/b]")
             if self.collision_count > 0:
-                yield Label(f"[yellow]Warning: {self.collision_count} name collisions will be auto-renamed.[/yellow]")
+                yield Label(
+                    f"[yellow]Warning: {self.collision_count} name collisions will be auto-renamed.[/yellow]"
+                )
             yield Label("This action can be undone anytime via 'folder-organizer undo'.")
             with Horizontal():
                 yield Button("Execute", variant="success", id="confirm-btn")
@@ -69,7 +70,7 @@ class ConfirmExecutionModal(ModalScreen[bool]):
         self.dismiss(False)
 
 
-class QueryModal(ModalScreen[Optional[str]]):
+class QueryModal(ModalScreen[str | None]):
     """Modal dialog for natural language query search / filter."""
 
     BINDINGS = [
