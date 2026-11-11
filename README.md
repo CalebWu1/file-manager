@@ -61,8 +61,8 @@ flowchart TD
 Ensure Python 3.10+ is installed.
 
 ```bash
-git clone https://github.com/CalebWu1/file-organizer.git
-cd file-organizer
+git clone https://github.com/CalebWu1/file-manager.git
+cd file-manager
 pip install -e ".[dev]"
 ```
 
